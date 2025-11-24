@@ -63,6 +63,9 @@ class ProcessingConfig:
     inn_total_length: int = 12
 
 
+SettingsTree = List[Dict[str, Any]]
+
+
 @dataclass
 class OutputConfig:
     """Настройки формирования выходных файлов."""
@@ -85,20 +88,57 @@ class OutputConfig:
 # --------------------------- Вспомогательные функции ------------------------
 
 
-def load_env(path: Path) -> Dict[str, str]:
-    """Загружает переменные окружения из файла .env без внешних библиотек."""
+def build_settings_tree() -> SettingsTree:
+    """Возвращает иерархию настроек, сгруппированную по темам."""
 
-    if not path.exists():
-        return {}
+    return [
+        {
+            "section": "spod",
+            "title": "Выгрузки СПОД и логирование",
+            "values": {
+                "file_prefix": "YEAR_SPOD_Active_Rost_Ost",
+                "log_topic": "spod",
+                "plan_value": 0.0,
+                "priority": "1",
+            },
+        },
+        {
+            "section": "contest",
+            "title": "Параметры турнира",
+            "values": {
+                "contest_code": "01_2025-2_14-1_2",
+                "tournament_code": "t_01_2025-2_14-1_2_1001",
+                "contest_date": "31/10/2025",
+            },
+        },
+        {
+            "section": "defaults",
+            "title": "Значения по умолчанию",
+            "values": {
+                "manager_name": "Не найден КМ",
+                "manager_tn": "90000009",
+            },
+        },
+        {
+            "section": "identifiers",
+            "title": "Преобразование идентификаторов",
+            "values": {
+                "tn_fill_char": "0",
+                "tn_total_length": 8,
+                "inn_fill_char": "0",
+                "inn_total_length": 12,
+            },
+        },
+    ]
 
-    env: Dict[str, str] = {}
-    for line in path.read_text(encoding="utf-8").splitlines():
-        striped = line.strip()
-        if not striped or striped.startswith("#") or "=" not in striped:
-            continue
-        name, value = striped.split("=", maxsplit=1)
-        env[name.strip()] = value.strip()
-    return env
+
+def get_settings_section(tree: SettingsTree, section_name: str) -> Dict[str, Any]:
+    """Возвращает словарь значений нужной секции."""
+
+    for section in tree:
+        if section["section"] == section_name:
+            return section["values"]
+    raise KeyError(f"Секция настроек {section_name} не найдена")
 
 
 def ensure_directories(directories: Iterable[Path]) -> None:
@@ -528,28 +568,28 @@ def process_project(project_root: Path) -> None:
 
     column_config = ColumnConfig()
     processing = ProcessingConfig()
-    env = load_env(project_root / ".env")
+    settings_tree = build_settings_tree()
+    spod_settings = get_settings_section(settings_tree, "spod")
+    contest_settings = get_settings_section(settings_tree, "contest")
+    default_settings = get_settings_section(settings_tree, "defaults")
+    identifier_settings = get_settings_section(settings_tree, "identifiers")
 
     output_config = OutputConfig(
-        file_prefix=env.get("FILE_PREFIX", "YEAR_SPOD_Active_Rost_Ost"),
-        log_topic=env.get("LOG_TOPIC", "spod"),
-        contest_code=env.get("CONTEST_CODE", "01_2025-2_14-1_2"),
-        tournament_code=env.get("TOURNAMENT_CODE", "t_01_2025-2_14-1_2_1001"),
-        contest_date_initial=env.get("CONTEST_DATE", "31/10/2025"),
-        plan_value=float(env.get("PLAN_VALUE", "0")),
-        spod_priority=env.get("SPOD_PRIORITY", "1"),
+        file_prefix=spod_settings["file_prefix"],
+        log_topic=spod_settings["log_topic"],
+        contest_code=contest_settings["contest_code"],
+        tournament_code=contest_settings["tournament_code"],
+        contest_date_initial=contest_settings["contest_date"],
+        plan_value=float(spod_settings["plan_value"]),
+        spod_priority=spod_settings["priority"],
     )
 
-    processing.default_manager_name = env.get(
-        "DEFAULT_MANAGER_NAME", processing.default_manager_name
-    )
-    processing.default_manager_id = env.get(
-        "DEFAULT_MANAGER_TN", processing.default_manager_id
-    )
-    processing.tn_fill_char = env.get("TN_FILL_CHAR", processing.tn_fill_char)
-    processing.tn_total_length = int(env.get("TN_TOTAL_LENGTH", processing.tn_total_length))
-    processing.inn_fill_char = env.get("INN_FILL_CHAR", processing.inn_fill_char)
-    processing.inn_total_length = int(env.get("INN_TOTAL_LENGTH", processing.inn_total_length))
+    processing.default_manager_name = default_settings["manager_name"]
+    processing.default_manager_id = default_settings["manager_tn"]
+    processing.tn_fill_char = identifier_settings["tn_fill_char"]
+    processing.tn_total_length = int(identifier_settings["tn_total_length"])
+    processing.inn_fill_char = identifier_settings["inn_fill_char"]
+    processing.inn_total_length = int(identifier_settings["inn_total_length"])
 
     input_dir = project_root / "IN"
     output_dir = project_root / "OUT"
