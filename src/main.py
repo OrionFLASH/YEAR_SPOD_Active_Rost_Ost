@@ -13,6 +13,8 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional
 
 import pandas as pd
+from openpyxl.styles import Alignment, Font
+from openpyxl.utils import get_column_letter
 
 
 SettingsTree = Dict[str, Any]
@@ -340,25 +342,6 @@ def log_debug(
     logger["debug"](message, class_name, func_name)
 
 
-def resolve_excel_engine(logger: Mapping[str, Any]) -> str:
-    """Подбирает доступный движок для записи Excel."""
-
-    try:
-        import xlsxwriter  # noqa: F401
-
-        log_info(
-            logger,
-            "Обнаружен модуль xlsxwriter: Excel будет сохранён с расширенным форматированием.",
-        )
-        return "xlsxwriter"
-    except ModuleNotFoundError:
-        log_info(
-            logger,
-            "Модуль xlsxwriter недоступен. Переключаюсь на openpyxl без расширенного форматирования.",
-        )
-        return "openpyxl"
-
-
 # -------------------------- Работа с исходными файлами ----------------------
 
 
@@ -668,27 +651,44 @@ def clamp_width(length: int) -> int:
 
 
 def format_excel_sheet(writer: pd.ExcelWriter, sheet_name: str, df: pd.DataFrame) -> None:
-    """Применяет форматирование листа Excel."""
-
-    if getattr(writer, "engine", "") != "xlsxwriter":
-        # openpyxl и другие движки не поддерживают используемое форматирование.
-        return
+    """Применяет форматирование листа Excel через openpyxl."""
 
     workbook = writer.book
-    worksheet = writer.sheets[sheet_name]
-    header_format = workbook.add_format({"bold": True, "text_wrap": True})
-    wrap_format = workbook.add_format({"text_wrap": True})
-    number_format = workbook.add_format({"num_format": "#,##0.00", "text_wrap": True})
+    worksheet = workbook[sheet_name]
 
-    worksheet.freeze_panes(1, 0)
-    worksheet.autofilter(0, 0, len(df), max(0, df.shape[1] - 1))
+    if df.empty:
+        return
 
-    for col_idx, column in enumerate(df.columns):
-        max_len = max((len(str(value)) for value in [column] + df[column].tolist()), default=0) + 2
+    worksheet.freeze_panes = worksheet["A2"]
+    worksheet.auto_filter.ref = worksheet.dimensions
+
+    header_alignment = Alignment(wrap_text=True)
+    wrap_alignment = Alignment(wrap_text=True)
+    number_alignment = Alignment(wrap_text=True)
+    header_font = Font(bold=True)
+
+    for cell in next(worksheet.iter_rows(min_row=1, max_row=1)):
+        cell.font = header_font
+        cell.alignment = header_alignment
+
+    for col_idx, column in enumerate(df.columns, start=1):
+        values = [column] + df[column].tolist()
+        max_len = max((len(str(value)) for value in values), default=0) + 2
         width = clamp_width(max_len)
-        fmt = number_format if column.startswith("Факт") or column == "Прирост" else wrap_format
-        worksheet.set_column(col_idx, col_idx, width, fmt)
-    worksheet.set_row(0, None, header_format)
+        column_letter = get_column_letter(col_idx)
+        worksheet.column_dimensions[column_letter].width = width
+
+        if worksheet.max_row >= 2:
+            data_range = worksheet[f"{column_letter}2": f"{column_letter}{worksheet.max_row}"]
+            if column.startswith("Факт") or column == "Прирост":
+                for cell_tuple in data_range:
+                    for item in cell_tuple:
+                        item.number_format = "#,##0.00"
+                        item.alignment = number_alignment
+            else:
+                for cell_tuple in data_range:
+                    for item in cell_tuple:
+                        item.alignment = wrap_alignment
 
 
 def format_decimal_string(value: float, decimals: int = 5) -> str:
@@ -1210,9 +1210,12 @@ def process_project(project_root: Path) -> None:
         excel_path = output_dir / excel_name
         log_info(logger, f"Сохраняю Excel-файл {excel_name}")
 
-        excel_engine = resolve_excel_engine(logger)
+        log_info(
+            logger,
+            "Используется движок openpyxl (доступен в базовой поставке Anaconda) для сохранения отчёта.",
+        )
 
-        with pd.ExcelWriter(excel_path, engine=excel_engine) as writer:
+        with pd.ExcelWriter(excel_path, engine="openpyxl") as writer:
             for sheet_name, table in variant_tables.items():
                 printable = rename_output_columns(table, alias_to_source)
                 printable.to_excel(writer, sheet_name=sheet_name, index=False)
