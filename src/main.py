@@ -340,6 +340,25 @@ def log_debug(
     logger["debug"](message, class_name, func_name)
 
 
+def resolve_excel_engine(logger: Mapping[str, Any]) -> str:
+    """Подбирает доступный движок для записи Excel."""
+
+    try:
+        import xlsxwriter  # noqa: F401
+
+        log_info(
+            logger,
+            "Обнаружен модуль xlsxwriter: Excel будет сохранён с расширенным форматированием.",
+        )
+        return "xlsxwriter"
+    except ModuleNotFoundError:
+        log_info(
+            logger,
+            "Модуль xlsxwriter недоступен. Переключаюсь на openpyxl без расширенного форматирования.",
+        )
+        return "openpyxl"
+
+
 # -------------------------- Работа с исходными файлами ----------------------
 
 
@@ -650,6 +669,10 @@ def clamp_width(length: int) -> int:
 
 def format_excel_sheet(writer: pd.ExcelWriter, sheet_name: str, df: pd.DataFrame) -> None:
     """Применяет форматирование листа Excel."""
+
+    if getattr(writer, "engine", "") != "xlsxwriter":
+        # openpyxl и другие движки не поддерживают используемое форматирование.
+        return
 
     workbook = writer.book
     worksheet = writer.sheets[sheet_name]
@@ -1187,7 +1210,9 @@ def process_project(project_root: Path) -> None:
         excel_path = output_dir / excel_name
         log_info(logger, f"Сохраняю Excel-файл {excel_name}")
 
-        with pd.ExcelWriter(excel_path, engine="xlsxwriter") as writer:
+        excel_engine = resolve_excel_engine(logger)
+
+        with pd.ExcelWriter(excel_path, engine=excel_engine) as writer:
             for sheet_name, table in variant_tables.items():
                 printable = rename_output_columns(table, alias_to_source)
                 printable.to_excel(writer, sheet_name=sheet_name, index=False)
