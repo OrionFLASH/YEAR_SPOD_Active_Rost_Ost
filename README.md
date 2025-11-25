@@ -3,6 +3,7 @@
 ## 1. Формулировка задачи и ТЗ
 - Необходимо сравнить два XLSX-файла с остатками задолженности (T-0 и T-1), рассчитать приросты по клиентам и корректно сопоставить их с табельными номерами клиентских менеджеров.
 - Полное техническое задание, полученное от заказчика, находится в `Docs/Задача.txt`. Файл перенесён без изменений и является первоисточником требований.
+- Методология расчета приростов для лаборатории режима (режима развития) с полной формализацией всех 8 вариантов расчета описана в `Docs/mode_lab_variant_matrix.md`. Этот документ содержит детальное описание логики построения матрицы комбинаций (ВКО/ИНН × с ТБ/без ТБ × КМ по каждому файлу/последний КМ) и является основой для реализации всех вариантов расчета.
 
 ## 2. Описание решения
 - Вся бизнес-логика реализована в одном файле `src/main.py` (как требовалось в задаче).
@@ -10,21 +11,24 @@
 - Входные файлы читаются из каталога `IN`, очищаются от запрещённых значений, нормализуются и агрегируются по четырём вариантам ключей (`ID`, `ID+ТБ`, `ID+ТН`, `ID+ТБ+ТН`).
 - Для каждого варианта рассчитываются суммы фактов T-0 и T-1, приросты, менеджеры по данным обоих периодов и «актуальный» менеджер (приоритет у T-0, затем T-1, иначе заглушка).
 - Дополнительно формируются листы с уникальными сочетаниями `ТН+ВКО` и `ТН+ВКО+ТБ`, а также выгрузка СПОД (лист Excel и CSV) с форматированием и заданными кодами конкурса.
+- Реализована полная матрица из 8 вариантов расчета приростов согласно методологии лаборатории режима (см. `Docs/mode_lab_variant_matrix.md`). Комбинации: ВКО/ИНН × с ТБ/без ТБ × КМ по каждому файлу/последний КМ. Все варианты сохраняются в Excel на отдельных листах (`V1_ВКО_безТБ_КМ_пофайлу`, `V2_ВКО_сТБ_КМ_пофайлу` и т.д.), а в CSV записывается только выбранная комбинация (параметр `csv_variant` в настройках `spod`).
+- Исходные очищенные данные T-0 и T-1 записываются в Excel на листы `RAW_T0` и `RAW_T1` с человекочитаемыми заголовками и числовым столбцом `Факт (число)`.
 - Логи ведутся раздельно для уровней INFO/DEBUG в каталоге `log`, в консоль выводится только INFO.
 
 ## 3. Структура каталогов
 ```
 YEAR_SPOD_Active_Rost_Ost/
-├── Docs/               # Дополнительные материалы (исходное ТЗ)
-├── IN/                 # Входные XLSX-файлы (T-0 и T-1)
-├── OUT/                # Итоговые Excel и CSV файлы
-├── log/                # Логи INFO/DEBUG
+├── Docs/                              # Дополнительные материалы
+│   ├── Задача.txt                     # Исходное ТЗ от заказчика
+│   └── mode_lab_variant_matrix.md     # Методология расчета приростов (матрица 8 вариантов)
+├── IN/                                 # Входные XLSX-файлы (T-0 и T-1)
+├── OUT/                                # Итоговые Excel и CSV файлы
+├── log/                                # Логи INFO/DEBUG
 ├── src/
-│   ├── main.py         # Основной скрипт
-│   └── Tests/README.md # Состояние автотестов
-├── .env.example        # Шаблон для будущих расширений (значения теперь в коде)
-├── README.md           # Текущая документация
-└── Docs/Задача.txt     # Исходное описание задачи
+│   ├── main.py                         # Основной скрипт
+│   └── Tests/README.md                 # Состояние автотестов
+├── .env.example                        # Шаблон для будущих расширений (значения теперь в коде)
+└── README.md                           # Текущая документация
 ```
 
 ## 4. Настройка окружения
@@ -38,14 +42,34 @@ YEAR_SPOD_Active_Rost_Ost/
 3. (Опционально) Скопировать `.env.example` в `.env`, если планируется возвращение к внешней конфигурации. По умолчанию все параметры уже прошиты в `src/main.py` и сведены в дерево настроек.
 
 ## 5. Конфигурация
-Все значения собраны в иерархической структуре (списки секций с вложенными словарями), которую формирует функция `build_settings_tree()` в `src/main.py`. Доступные блоки:
+Вся настройка сведена в единую структуру (списки и вложенные словари), которую формирует функция `build_settings_tree()`:
 
-1. **spod** — имена файлов, тема логов, план и приоритет выгрузки.
-2. **contest** — коды конкурса/турнира и дата отчёта.
-3. **defaults** — заглушки для ФИО и табельного номера КМ.
-4. **identifiers** — правила нормализации табельных номеров и ИНН.
+1. **files** — описание входных XLSX.
+   - `items` (`current`/`previous`): имя файла в `IN`, метка периода и лист. При замене файла достаточно изменить `file_name`, при смене листа — `sheet`.
+   - `columns`: alias ↔ оригинальный заголовок в Excel. Чтобы добавить новое поле, внесите ещё один словарь.
+2. **filters** — правила очистки (`drop_rules`), где указываются alias и набор запрещённых строк.
+3. **defaults** — заглушки ФИО/табельного номера, которые подставляются, если ни T-0, ни T-1 не содержат менеджера.
+4. **identifiers** — форматирование `manager_id` и `client_id` (символ заполнения и итоговая длина).
+5. **spod** — параметры выгрузки (префикс имён, тема логов, плановое значение, приоритет и `fact_value_filter`, например `all`, `>=0`, `>1000`, `<=-50`, `==0`, `!=0`). Также содержит `csv_variant` (номер от 1 до 8) — выбранную комбинацию для CSV согласно матрице вариантов:
+   - 1: ВКО, без ТБ, КМ по каждому файлу
+   - 2: ВКО, с ТБ, КМ по каждому файлу
+   - 3: ВКО, без ТБ, последний КМ
+   - 4: ВКО, с ТБ, последний КМ
+   - 5: ИНН, без ТБ, КМ по каждому файлу
+   - 6: ИНН, с ТБ, КМ по каждому файлу
+   - 7: ИНН, без ТБ, последний КМ
+   - 8: ИНН, с ТБ, последний КМ
+6. **contest** — коды конкурса/турнира и дата отчёта (`DD/MM/YYYY`).
+7. **manager_views** — сценарии построения итоговых листов по менеджерам:
+   - `source_variant`: какой вариант из блока `variants` брать (`ID_TN`, `ID_TB_TN` и т.д.).
+   - `include_tb`: учитывать ли ТБ в ключе (True → группировка по ТБ+КМ).
+   - `manager_mode`: как выбирать табельный номер: `latest` (T-0, затем T-1), `current_period` (только T-0) или `previous_period` (только T-1).
+   - `use_for_spod`: если True, данный лист используется для формирования листа `SPOD` и CSV.
+8. **direct_manager_views** — прямое суммирование по менеджеру (и опционально по ТБ) без опоры на клиентов (сценарий «весь факт на КМ»).
+9. **growth_combinations** — комбинации аналитики, собранные поверх листов (например, `COMBO_VKO_NO_TB` опирается на `MANAGER_DIRECT` и даёт прирост «всё, что есть на КМ сейчас minus всё, что было» без учёта ТБ).
+10. **variants** — основная сетка листов Excel «по клиентам» (служит источником данных для `manager_views`).
 
-Чтобы изменить параметры, достаточно поправить соответствующие значения в словаре `values` нужной секции; `process_project` автоматически применит обновления при построении `OutputConfig` и `ProcessingConfig`.
+Любой параметр меняется прямо в соответствующем блоке структуры; остальные функции получают настройки автоматически.
 
 ## 6. Использование
 1. Поместите исходные файлы в каталог `IN` под именами:
@@ -55,50 +79,68 @@ YEAR_SPOD_Active_Rost_Ost/
    ```bash
    python src/main.py
    ```
-3. Результаты появятся в каталоге `OUT` в виде Excel и CSV файлов с суффиксом `_YYYYMMDD_HH_MM`.
+3. Результаты появятся в каталоге `OUT` в виде Excel и CSV файлов с суффиксом `_YYYYMMDD_HH_MM`. Лист `SPOD` и одноимённый CSV отсортированы по `FACT_VALUE` в соответствии с `fact_value_filter`. Excel также формирует:
+   - `RAW_T0/RAW_T1` — очищенные исходные данные;
+   - листы из `manager_views` (например, `TN_VKO`, `TN_VKO_TB`) — задают режим учёта ТБ и выбора КМ; один из них используется для SPOD;
+   - листы из `direct_manager_views` (`MANAGER_DIRECT`, `MANAGER_DIRECT_TB`) — прямой подсчёт приростов по КМ без клиентских ключей;
+   - листы из `growth_combinations`, включая `COMBO_VKO_NO_TB` — реализует сценарий «прирост по ВКО без учёта ТБ»;
+   - матрица вариантов (`V1_ВКО_безТБ_КМ_пофайлу` ... `V8_ИНН_сТБ_КМ_последний`) — все 8 комбинаций расчета приростов согласно методологии лаборатории режима. В CSV записывается только выбранная комбинация (параметр `csv_variant` в настройках `spod`).
 4. Логи формирования находятся в `log/INFO_*` и `log/DEBUG_*`.
 
 ## 7. Логирование
 - INFO: ключевые этапы обработки, пишутся в файл `INFO_<topic>_<timestamp>.log` и дублируются в консоль.
 - DEBUG: подробные сообщения для каждой функции с указанием класса и имени функции, записываются в `DEBUG_<topic>_<timestamp>.log`.
 - Формат DEBUG строки: `YYYY-MM-DD HH:MM:SS - [DEBUG] - Сообщение [class: <...> | def: <...>]`.
+- При возникновении исключений основной сценарий фиксирует сообщение в INFO и полную трассировку (в одну строку) в DEBUG, после чего пробрасывает ошибку наружу.
 
 ## 8. Список функций и примеры использования
 | Функция / структура | Назначение | Пример вызова |
 |--------------------|-----------|---------------|
-| `ColumnConfig` | Хранит оригинальные имена колонок и маппинг | `column_config = ColumnConfig()` |
-| `ProcessingConfig` | Параметры очистки и форматирования | `processing = ProcessingConfig()` |
-| `OutputConfig` | Настройки выходных файлов и СПОД | `output_config = OutputConfig(... )` |
-| `build_settings_tree()` | Возвращает дерево секций настроек | `settings = build_settings_tree()` |
-| `get_settings_section(tree, name)` | Извлекает словарь выбранной секции | `contest = get_settings_section(settings, 'contest')` |
+| `build_settings_tree()` | Возвращает полную вложенную структуру настроек | `settings = build_settings_tree()` |
+| `build_column_profiles(columns)` | Строит маппинг alias↔оригинал | `profiles = build_column_profiles(settings['files']['columns'])` |
+| `build_drop_rules(rules)` | Преобразует список запретов к dict | `rules = build_drop_rules(settings['filters']['drop_rules'])` |
+| `get_file_meta(file_section, key)` | Возвращает описание нужного Excel | `current = get_file_meta(settings['files'], 'current')` |
+| `resolve_sheet_name(file_section, key)` | Определяет имя листа файла | `sheet = resolve_sheet_name(settings['files'], 'current')` |
+| `parse_contest_date(contest)` | Переводит дату турнира к ISO | `iso = parse_contest_date(settings['contest'])` |
+| `get_manager_columns(mode)` | Возвращает колонки для режима назначения КМ | `cols = get_manager_columns('latest')` |
+| `build_filter_mask(series, condition)` | Формирует маску для фильтра `FACT_VALUE` | `mask = build_filter_mask(df['Прирост'], '>=0')` |
 | `ensure_directories(paths)` | Создаёт недостающие каталоги | `ensure_directories([Path('IN')])` |
 | `timestamp_suffix()` | Возвращает строку `_YYYYMMDD_HH_MM` | `suffix = timestamp_suffix()` |
 | `format_identifier(value, length, char)` | Форматирует идентификаторы с лидирующими символами | `format_identifier('85461', 8, '0') -> '00085461'` |
 | `safe_to_float(value)` | Безопасно приводит строку к `float` | `safe_to_float('43,51') -> 43.51` |
 | `normalize_string(value)` | Очищает текстовое поле | `normalize_string('  ABC ') -> 'ABC'` |
-| `StructuredLogger` | Класс для INFO/DEBUG логов | `logger = build_logger(Path('log'), 'spod')` |
-| `build_logger(log_dir, topic)` | Создаёт экземпляр `StructuredLogger` | `logger = build_logger(Path('log'), 'spod')` |
-| `read_source_file(path, columns, processing, logger)` | Загружает Excel, нормализует данные | `df = read_source_file(file_path, column_config, processing, logger)` |
-| `drop_forbidden_rows(df, rules, logger)` | Удаляет строки с запрещёнными значениями | `cleaned = drop_forbidden_rows(df, processing.drop_rules, logger)` |
+| `build_logger(log_dir, topic)` | Возвращает функции `info`/`debug` | `logger = build_logger(Path('log'), 'spod')` |
+| `log_info(logger, message)` | Записывает INFO без классов | `log_info(logger, 'Старт обработки')` |
+| `log_debug(logger, message, class, func)` | Записывает DEBUG | `log_debug(logger, '...', 'Cleaner', 'drop_forbidden_rows')` |
+| `read_source_file(path, sheet, columns, rules, ids, logger)` | Загружает Excel, нормализует данные | `df = read_source_file(file_path, 'Sheet1', rename_map, rules, identifiers, logger)` |
+| `drop_forbidden_rows(df, rules, logger)` | Удаляет строки с запрещёнными значениями | `cleaned = drop_forbidden_rows(df, rules, logger)` |
 | `aggregate_facts(df, keys, suffix, logger, variant)` | Суммирует факт по ключу | `agg = aggregate_facts(df, ['client_id'], 'T0', logger, 'ID')` |
 | `select_best_manager(df, keys, logger, variant)` | Определяет менеджера с максимальным фактом | `best = select_best_manager(df, ['client_id'], logger, 'ID')` |
-| `build_latest_manager(curr, prev, keys, defaults, logger, variant)` | Комбинирует актуального менеджера | `latest = build_latest_manager(curr, prev, ['client_id'], 'Не найден', '90000009', logger, 'ID')` |
-| `assemble_variant_dataset(variant, keys, df_t0, df_t1, processing, logger)` | Строит итоговый набор данных для листа | `variant_tables['ID'] = assemble_variant_dataset('ID', ['client_id'], df_t0, df_t1, processing, logger)` |
-| `build_manager_summary(df, include_tb, logger, name)` | Готовит свод по ТН/ВКО | `summary = build_manager_summary(variant_tables['ID_TN'], False, logger, 'TN_VKO')` |
+| `build_latest_manager(curr, prev, keys, defaults, ids, logger, variant)` | Комбинирует актуального менеджера | `latest = build_latest_manager(curr, prev, ['client_id'], defaults, identifiers, logger, 'ID')` |
+| `assemble_variant_dataset(variant, keys, df_t0, df_t1, defaults, ids, logger)` | Строит итоговый набор данных для листа | `variant_tables['ID'] = assemble_variant_dataset('ID', ['client_id'], df_t0, df_t1, defaults, identifiers, logger)` |
+| `build_manager_summary(df, include_tb, logger, name, manager_cols)` | Готовит свод по ТН/ВКО с выбранным режимом КМ | `summary = build_manager_summary(variant_tables['ID_TN'], False, logger, 'TN_VKO', get_manager_columns('latest'))` |
+| `build_direct_manager_summary(df_t0, df_t1, include_tb, logger, name)` | Суммирует факты напрямую по КМ (и опционально ТБ) | `direct = build_direct_manager_summary(current_df, previous_df, False, logger, 'MANAGER_DIRECT')` |
 | `format_excel_sheet(writer, sheet, df)` | Применяет оформление листа | `format_excel_sheet(writer, 'ID', df)` |
 | `format_decimal_string(value)` | Приводит число к строке вида `0.00000` | `format_decimal_string(12.3) -> '12.30000'` |
-| `build_spod_dataset(summary, output_cfg, processing, logger)` | Создаёт таблицу для СПОД и CSV | `spod = build_spod_dataset(summary, output_cfg, processing, logger)` |
-| `rename_output_columns(df, column_config)` | Возвращает русские подписи колонок | `rename_output_columns(table, column_config)` |
+| `build_spod_dataset(summary, spod_cfg, contest_cfg, ids, logger)` | Создаёт таблицу для СПОД/CSV | `spod = build_spod_dataset(summary, settings['spod'], settings['contest'], identifiers, logger)` |
+| `rename_output_columns(df, alias_map)` | Возвращает русские подписи колонок | `rename_output_columns(table, profiles['alias_to_source'])` |
+| `format_raw_sheet(df, alias_map)` | Подготавливает листы `RAW_T0/RAW_T1` | `raw = format_raw_sheet(current_df, profiles['alias_to_source'])` |
+| `build_variant_matrix(df_t0, df_t1, defaults, ids, logger)` | Строит матрицу всех 8 вариантов расчета приростов (ВКО/ИНН × с ТБ/без ТБ × КМ по файлу/последний) | `matrix = build_variant_matrix(current_df, previous_df, defaults, identifiers, logger)` |
 | `process_project(project_root)` | Композиция всех шагов пайплайна | `process_project(Path.cwd())` |
 | `main()` | Точка входа CLI | `python src/main.py` |
 
 ## 9. История версий
 | Версия | Дата | Изменения |
 |--------|------|-----------|
+| 1.4.0 | 2025-11-25 | Реализована полная матрица из 8 вариантов расчета приростов согласно методологии лаборатории режима. Все варианты сохраняются в Excel на отдельных листах, в CSV записывается только выбранная комбинация (параметр `csv_variant` в настройках `spod`). |
+| 1.3.0 | 2025-11-25 | Добавлены настройки для учёта ТБ и режима назначения КМ в итогах/SPOD; реализованы листы `manager_views`, `direct_manager_views`, а также комбинации (например, `COMBO_VKO_NO_TB`). |
+| 1.2.1 | 2025-11-25 | В Excel добавлены листы `RAW_T0/RAW_T1` с исходными данными и числовым `Факт (число)`; описаны новые функции форматирования. |
+| 1.2.0 | 2025-11-25 | Полный переход на функциональный стиль: настройки сведены в вложенные структуры, классы логера/конфигов заменены на функции, добавлен фильтр и сортировка FACT_VALUE. |
 | 1.1.0 | 2025-11-24 | Значения из `.env` перенесены напрямую в `src/main.py`, убрано чтение внешнего файла конфигурации. |
 | 1.0.0 | 2025-11-24 | Создан репозиторий, реализован основной сценарий расчёта приростов, добавлены логирование, шаблон `.env`, структура каталогов и документация. |
 
 ## 10. Дополнительные материалы
-- `Docs/Задача.txt` — исходное ТЗ.
+- `Docs/Задача.txt` — исходное техническое задание от заказчика.
+- `Docs/mode_lab_variant_matrix.md` — полная формализация логики расчета приростов для лаборатории режима (режима развития). Содержит детальное описание всех 8 вариантов расчета, принципы построения матрицы комбинаций, правила агрегации и определения клиентских менеджеров. Этот документ является основой для реализации функции `build_variant_matrix()` и всей логики расчета приростов в проекте.
 - `src/Tests/README.md` — инструкция по тестированию до появления автотестов.
 
