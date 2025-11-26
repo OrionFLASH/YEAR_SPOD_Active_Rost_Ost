@@ -74,7 +74,9 @@ def build_settings_tree() -> SettingsTree:
             "drop_rules": [
                 {"alias": "manager_name", "values": ["-", "Серая зона"]},
                 {"alias": "manager_id", "values": ["-", "Green_Zone", "Tech_Sib"]},
-                {"alias": "client_id", "values": ["Report_id не определен"]},
+                {"alias": "client_id", "values": ["Report_id не определен", "0", "000000000000"]},
+                {"alias": "tb", "values": ["ЦА"]},
+                {"alias": "gosb", "values": ["9999"]},
             ],
         },
         "defaults": {
@@ -288,23 +290,24 @@ def build_filter_mask(series: pd.Series, condition: str) -> pd.Series:
     )
 
 
-def _compute_percentile_pair(series: pd.Series) -> Tuple[pd.Series, pd.Series]:
-    """Вспомогательная функция: возвращает (обогнал_%, обогнали_%) для серии."""
+def _compute_percentile_pair(series: pd.Series) -> Tuple[pd.Series, pd.Series, pd.Series, pd.Series, pd.Series, pd.Series]:
+    """Вспомогательная функция: возвращает (обогнал_%, обогнали_%, обогнал_кол, обогнали_кол, равных_кол, всего_кол) для серии."""
 
     if series.empty:
         empty = pd.Series(0.0, index=series.index)
-        return empty, empty
+        return empty, empty, empty, empty, empty, empty
 
     rank_min = series.rank(method="min", ascending=True)
     rank_max = series.rank(method="max", ascending=True)
     count_equal = rank_max - rank_min + 1
     count_less = rank_min - 1
     count_greater = len(series) - rank_max
+    total_count = len(series)
 
-    obognal = ((count_less + 0.5 * (count_equal - 1)) / len(series)) * 100
-    obognali = ((count_greater + 0.5 * (count_equal - 1)) / len(series)) * 100
+    obognal = ((count_less + 0.5 * (count_equal - 1)) / total_count) * 100
+    obognali = ((count_greater + 0.5 * (count_equal - 1)) / total_count) * 100
 
-    return obognal, obognali
+    return obognal, obognali, count_less, count_greater, count_equal - 1, pd.Series(total_count, index=series.index)
 
 
 def append_percentile_columns(
@@ -313,7 +316,7 @@ def append_percentile_columns(
     value_column: str,
     tb_column: Optional[str] = None,
 ) -> pd.DataFrame:
-    """Добавляет в таблицу колонки процентных рангов (см. Docs/percentile_logic.md)."""
+    """Добавляет в таблицу колонки процентных рангов и абсолютных значений (см. Docs/percentile_logic.md)."""
 
     if value_column not in table.columns:
         raise KeyError(
@@ -323,22 +326,42 @@ def append_percentile_columns(
     prepared = table.copy()
     values = pd.to_numeric(prepared[value_column], errors="coerce").fillna(0.0)
 
-    obognal_all, obognali_all = _compute_percentile_pair(values)
+    obognal_all, obognali_all, count_less_all, count_greater_all, count_equal_all, total_all = _compute_percentile_pair(values)
     prepared["Обогнал_всего_%"] = obognal_all
     prepared["Обогнали_меня_всего_%"] = obognali_all
+    prepared["Обогнал_всего_кол"] = count_less_all
+    prepared["Обогнали_меня_всего_кол"] = count_greater_all
+    prepared["Равных_всего_кол"] = count_equal_all
+    prepared["Всего_КМ_всего"] = total_all
 
     mask_non_negative = values >= 0
     if mask_non_negative.any():
-        obognal_ge0, obognali_ge0 = _compute_percentile_pair(values[mask_non_negative])
+        obognal_ge0, obognali_ge0, count_less_ge0, count_greater_ge0, count_equal_ge0, total_ge0 = _compute_percentile_pair(values[mask_non_negative])
         prepared["Обогнал_всего_≥0_%"] = obognal_ge0.reindex(
             prepared.index, fill_value=0.0
         )
         prepared["Обогнали_меня_всего_≥0_%"] = obognali_ge0.reindex(
             prepared.index, fill_value=0.0
         )
+        prepared["Обогнал_всего_≥0_кол"] = count_less_ge0.reindex(
+            prepared.index, fill_value=0.0
+        )
+        prepared["Обогнали_меня_всего_≥0_кол"] = count_greater_ge0.reindex(
+            prepared.index, fill_value=0.0
+        )
+        prepared["Равных_всего_≥0_кол"] = count_equal_ge0.reindex(
+            prepared.index, fill_value=0.0
+        )
+        prepared["Всего_КМ_всего_≥0"] = total_ge0.reindex(
+            prepared.index, fill_value=0.0
+        )
     else:
         prepared["Обогнал_всего_≥0_%"] = 0.0
         prepared["Обогнали_меня_всего_≥0_%"] = 0.0
+        prepared["Обогнал_всего_≥0_кол"] = 0.0
+        prepared["Обогнали_меня_всего_≥0_кол"] = 0.0
+        prepared["Равных_всего_≥0_кол"] = 0.0
+        prepared["Всего_КМ_всего_≥0"] = 0.0
 
     tb_column_present = tb_column and tb_column in prepared.columns
     tb_columns = [
@@ -347,26 +370,44 @@ def append_percentile_columns(
         "Обогнал_ТерБанк_≥0_%",
         "Обогнали_меня_ТерБанк_≥0_%",
     ]
+    tb_count_columns = [
+        "Обогнал_ТерБанк_кол",
+        "Обогнали_меня_ТерБанк_кол",
+        "Равных_ТерБанк_кол",
+        "Всего_КМ_ТерБанк",
+        "Обогнал_ТерБанк_≥0_кол",
+        "Обогнали_меня_ТерБанк_≥0_кол",
+        "Равных_ТерБанк_≥0_кол",
+        "Всего_КМ_ТерБанк_≥0",
+    ]
     if tb_column_present:
-        for column in tb_columns:
+        for column in tb_columns + tb_count_columns:
             prepared[column] = 0.0
 
         for _, group in prepared.groupby(tb_column):
             subset_values = values.loc[group.index]
-            obognal_tb, obognali_tb = _compute_percentile_pair(subset_values)
+            obognal_tb, obognali_tb, count_less_tb, count_greater_tb, count_equal_tb, total_tb = _compute_percentile_pair(subset_values)
             prepared.loc[group.index, "Обогнал_ТерБанк_%"] = obognal_tb
             prepared.loc[group.index, "Обогнали_меня_ТерБанк_%"] = obognali_tb
+            prepared.loc[group.index, "Обогнал_ТерБанк_кол"] = count_less_tb
+            prepared.loc[group.index, "Обогнали_меня_ТерБанк_кол"] = count_greater_tb
+            prepared.loc[group.index, "Равных_ТерБанк_кол"] = count_equal_tb
+            prepared.loc[group.index, "Всего_КМ_ТерБанк"] = total_tb
 
             tb_mask = subset_values >= 0
             if tb_mask.any():
-                obognal_tb_ge0, obognali_tb_ge0 = _compute_percentile_pair(
+                obognal_tb_ge0, obognali_tb_ge0, count_less_tb_ge0, count_greater_tb_ge0, count_equal_tb_ge0, total_tb_ge0 = _compute_percentile_pair(
                     subset_values[tb_mask]
                 )
                 idx = subset_values[tb_mask].index
                 prepared.loc[idx, "Обогнал_ТерБанк_≥0_%"] = obognal_tb_ge0
                 prepared.loc[idx, "Обогнали_меня_ТерБанк_≥0_%"] = obognali_tb_ge0
+                prepared.loc[idx, "Обогнал_ТерБанк_≥0_кол"] = count_less_tb_ge0
+                prepared.loc[idx, "Обогнали_меня_ТерБанк_≥0_кол"] = count_greater_tb_ge0
+                prepared.loc[idx, "Равных_ТерБанк_≥0_кол"] = count_equal_tb_ge0
+                prepared.loc[idx, "Всего_КМ_ТерБанк_≥0"] = total_tb_ge0
     else:
-        for column in tb_columns:
+        for column in tb_columns + tb_count_columns:
             prepared[column] = 0.0
 
     percent_columns = [
@@ -431,8 +472,9 @@ def build_assignment_table(
     identifiers: Mapping[str, Any],
     logger: Mapping[str, Any],
     scenario_name: str,
+    manager_tb_mapping: Optional[pd.Series] = None,
 ) -> pd.DataFrame:
-    """Возвращает таблицу назначений (ключ ↔ выбранный КМ)."""
+    """Возвращает таблицу назначений (ключ ↔ выбранный КМ). Всегда добавляет ТБ, определяя его по табельному номеру."""
 
     if manager_assignment not in {"latest", "per_file"}:
         raise ValueError("manager_assignment должен быть latest или per_file.")
@@ -446,6 +488,8 @@ def build_assignment_table(
             "Факт_T1",
             "Прирост",
         ]
+        if "ТБ" not in columns and "tb" not in columns:
+            columns.append("ТБ")
         return pd.DataFrame(columns=columns)
 
     if manager_assignment == "latest":
@@ -456,6 +500,14 @@ def build_assignment_table(
         assignments["Факт_T0"] = variant_df["Факт_T0"].fillna(0.0)
         assignments["Факт_T1"] = variant_df["Факт_T1"].fillna(0.0)
         assignments["Прирост"] = variant_df["Прирост"].fillna(0.0)
+        
+        # Добавляем ТБ, если его нет, определяя по табельному номеру
+        if "ТБ" not in assignments.columns and "tb" not in assignments.columns:
+            if manager_tb_mapping is not None:
+                assignments["ТБ"] = assignments[SELECTED_MANAGER_ID_COL].map(manager_tb_mapping).fillna("")
+            else:
+                assignments["ТБ"] = ""
+        
         log_debug(
             logger,
             f"{scenario_name}: назначено {len(assignments)} записей (режим latest)",
@@ -498,6 +550,12 @@ def build_assignment_table(
                 "Факт_T1": 0.0,
                 "Прирост": max(growth, 0.0),
             }
+            # Добавляем ТБ, если его нет, определяя по табельному номеру
+            if "ТБ" not in record and "tb" not in record:
+                if manager_tb_mapping is not None:
+                    record["ТБ"] = manager_tb_mapping.get(manager_t0, "")
+                else:
+                    record["ТБ"] = ""
             records.append(record)
 
         if fact_t1 or growth < 0:
@@ -510,6 +568,12 @@ def build_assignment_table(
                 "Факт_T1": fact_t1,
                 "Прирост": min(growth, 0.0),
             }
+            # Добавляем ТБ, если его нет, определяя по табельному номеру
+            if "ТБ" not in record and "tb" not in record:
+                if manager_tb_mapping is not None:
+                    record["ТБ"] = manager_tb_mapping.get(manager_t1, "")
+                else:
+                    record["ТБ"] = ""
             records.append(record)
 
     assignments = pd.DataFrame(records)
@@ -533,29 +597,54 @@ def build_assignment_table(
     return assignments
 
 
+def build_manager_tb_mapping(
+    current_df: pd.DataFrame,
+    previous_df: pd.DataFrame,
+) -> pd.Series:
+    """Строит словарь соответствия табельного номера менеджера и ТБ из исходных данных."""
+    
+    # Объединяем оба датафрейма для получения всех соответствий
+    combined = pd.concat([
+        current_df[["manager_id", "tb"]].drop_duplicates(),
+        previous_df[["manager_id", "tb"]].drop_duplicates()
+    ]).drop_duplicates()
+    
+    # Если у одного менеджера несколько ТБ, берём первое (можно изменить логику на most_common)
+    mapping = combined.groupby("manager_id")["tb"].first()
+    return mapping
+
+
 def build_assignment_summary(
     assignment_df: pd.DataFrame,
     *,
     include_tb: bool,
     logger: Mapping[str, Any],
     summary_name: str,
+    manager_tb_mapping: Optional[pd.Series] = None,
 ) -> pd.DataFrame:
-    """Суммирует факты/приросты по выбранным менеджерам."""
+    """Суммирует факты/приросты по выбранным менеджерам. Всегда добавляет ТБ, определяя его по табельному номеру."""
 
     group_columns = [SELECTED_MANAGER_ID_COL, SELECTED_MANAGER_NAME_COL]
+    
+    # Всегда добавляем ТБ, определяя его по табельному номеру, если его нет в данных
+    if "ТБ" not in assignment_df.columns and "tb" not in assignment_df.columns:
+        if manager_tb_mapping is not None and not assignment_df.empty:
+            # Определяем ТБ по табельному номеру
+            assignment_df = assignment_df.copy()
+            assignment_df["ТБ"] = assignment_df[SELECTED_MANAGER_ID_COL].map(manager_tb_mapping).fillna("")
+    
     tb_column_name: Optional[str] = None
-    if include_tb:
-        if "ТБ" in assignment_df.columns:
-            tb_column_name = "ТБ"
-        elif "tb" in assignment_df.columns:
-            tb_column_name = "tb"
+    if "ТБ" in assignment_df.columns:
+        tb_column_name = "ТБ"
+    elif "tb" in assignment_df.columns:
+        tb_column_name = "tb"
+    
     if tb_column_name:
         group_columns.append(tb_column_name)
 
     if assignment_df.empty:
-        return pd.DataFrame(
-            columns=group_columns + ["Факт_T0", "Факт_T1", "Прирост", "Количество записей"]
-        )
+        columns = group_columns + ["Факт_T0", "Факт_T1", "Прирост", "Количество записей"]
+        return pd.DataFrame(columns=columns)
 
     numeric_columns = ["Факт_T0", "Факт_T1", "Прирост"]
     summary = (
@@ -983,6 +1072,12 @@ def format_excel_sheet(writer: pd.ExcelWriter, sheet_name: str, df: pd.DataFrame
                 for cell_tuple in data_range:
                     for item in cell_tuple:
                         item.number_format = "#,##0.00"
+                        item.alignment = number_alignment
+            elif "_кол" in column or "Всего_КМ" in column:
+                # Колонки с количеством - целые числа
+                for cell_tuple in data_range:
+                    for item in cell_tuple:
+                        item.number_format = "#,##0"
                         item.alignment = number_alignment
             else:
                 for cell_tuple in data_range:
@@ -1449,6 +1544,9 @@ def process_project(project_root: Path) -> None:
             logger,
         )
 
+        # Строим соответствие табельного номера и ТБ из исходных данных
+        manager_tb_mapping = build_manager_tb_mapping(current_df, previous_df)
+
         scenario_cfg = settings["scenario"]
         scenario_name = scenario_cfg.get("name", "SCENARIO")
         key_mode = scenario_cfg.get("key_mode", "client")
@@ -1480,6 +1578,7 @@ def process_project(project_root: Path) -> None:
             identifiers=identifiers,
             logger=logger,
             scenario_name=scenario_name,
+            manager_tb_mapping=manager_tb_mapping,
         )
 
         detail_table = rename_output_columns(assignment_df, alias_to_source)
@@ -1488,6 +1587,7 @@ def process_project(project_root: Path) -> None:
             include_tb=include_tb_scenario,
             logger=logger,
             summary_name=f"{scenario_name}_SUMMARY",
+            manager_tb_mapping=manager_tb_mapping,
         )
         percentile_table = append_percentile_columns(
             summary_table,
