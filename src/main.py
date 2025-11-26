@@ -10,7 +10,7 @@ import datetime as dt
 import operator
 import traceback
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Optional
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Set, Tuple
 
 import pandas as pd
 from openpyxl.styles import Alignment, Font
@@ -90,49 +90,77 @@ def build_settings_tree() -> SettingsTree:
             "client_id": {"fill_char": "0", "total_length": 12},
         },
         "spod": {
-            # Параметры выгрузки СПОД.
-            #  file_prefix — префикс имен Excel/CSV; допустимы любые латинские буквы+цифры.
-            #  log_topic — метка в названиях логов (можно использовать разные темы для разных запусков).
-            #  plan_value — число, которое пойдёт в PLAN_VALUE (float/decimal).
-            #  priority — строковый приоритет записи ("1", "2" и т.д., как требует СПОД).
-            #  fact_value_filter — условие отбора строк на лист SPOD (all, >=0, >1000, <=-10, ==0, !=0 ...).
-            #  csv_variant — выбранная комбинация для CSV (номер от 1 до 8 согласно матрице вариантов):
-            #    1: ВКО, без ТБ, КМ по каждому файлу
-            #    2: ВКО, с ТБ, КМ по каждому файлу
-            #    3: ВКО, без ТБ, последний КМ
-            #    4: ВКО, с ТБ, последний КМ
-            #    5: ИНН, без ТБ, КМ по каждому файлу
-            #    6: ИНН, с ТБ, КМ по каждому файлу
-            #    7: ИНН, без ТБ, последний КМ
-            #    8: ИНН, с ТБ, последний КМ
+            # Глобальные параметры имени файлов/логов. Остальные настройки задаются
+            # в разделе spod_variants индивидуально для каждого варианта.
             "file_prefix": "YEAR_SPOD_Active_Rost_ost",
             "log_topic": "spod",
-            "plan_value": 0.0,
-            "priority": "1",
-            "fact_value_filter": ">0",
-            "csv_variant": 7,
         },
-        "contest": {
-            # Официальные коды и дата турнира (строка в формате DD/MM/YYYY).
-            #  - При изменении даты здесь автоматически обновится поле CONTEST_DATE в CSV/Excel.
-            "contest_code": "01_2025-2_14-1_2",
-            "tournament_code": "t_01_2025-2_14-1_2_1001",
-            "contest_date": "31/10/2025",
-        },
+        "percentile_views": [
+            {
+                "name": "V7_PERC_ALL",
+                "source_type": "manager_view",
+                "source_name": "TN_VKO",
+                "sheet_name": "V7_PERCENTILE_ALL",
+                "value_column": "Прирост",
+                "tb_column": None,
+                "metric_column": "Обогнал_всего_%",
+                "metric_label": "Обогнал всего, %",
+            },
+            {
+                "name": "V7_PERC_TB",
+                "source_type": "manager_view",
+                "source_name": "TN_VKO_TB",
+                "sheet_name": "V7_PERCENTILE_TB",
+                "value_column": "Прирост",
+                "tb_column": "ТБ",
+                "metric_column": "Обогнал_ТерБанк_%",
+                "metric_label": "Обогнал внутри ТБ, %",
+            },
+        ],
+        "spod_variants": [
+            {
+                "name": "SPOD_V7",
+                "source_type": "manager_view",
+                "source_name": "TN_VKO",
+                "calc_sheet_name": "CALC_V7",
+                "spod_sheet_name": "SPOD_V7",
+                "value_column": "Прирост",
+                "fact_value_filter": ">0",
+                "plan_value": 0.0,
+                "priority": "1",
+                "contest_code": "01_2025-2_14-1_2",
+                "tournament_code": "t_01_2025-2_14-1_2_1001",
+                "contest_date": "31/10/2025",
+                "include_in_csv": True,
+            },
+            {
+                "name": "SPOD_V7_PERCENTILE",
+                "source_type": "percentile_view",
+                "source_name": "V7_PERC_ALL",
+                "calc_sheet_name": "CALC_V7_PERC_ALL",
+                "spod_sheet_name": "SPOD_V7_PERC_ALL",
+                "value_column": "Обогнал всего, %",
+                "fact_value_filter": ">=0",
+                "plan_value": 0.0,
+                "priority": "1",
+                "contest_code": "01_2025-2_14-1_2",
+                "tournament_code": "t_01_2025-2_14-1_2_1001",
+                "contest_date": "31/10/2025",
+                "include_in_csv": True,
+            },
+        ],
         "manager_views": [
             {
                 "name": "TN_VKO",
                 "source_variant": "ID_TN",
                 "include_tb": False,
                 "manager_mode": "latest",
-                "use_for_spod": True,
             },
             {
                 "name": "TN_VKO_TB",
                 "source_variant": "ID_TB_TN",
                 "include_tb": True,
                 "manager_mode": "latest",
-                "use_for_spod": False,
             },
         ],
         "direct_manager_views": [
@@ -147,6 +175,19 @@ def build_settings_tree() -> SettingsTree:
                 "description": "Прирост по ВКО без учёта ТБ (сумма по каждому КМ в T0 минус сумма по нему же в T1).",
             },
         ],
+        "report_layout": {
+            # Управляет тем, какие листы попадают в основной Excel (пустой список = блок отключён).
+            # Отсутствие ключа означает сохранение предыдущего поведения и выгрузку всех листов блока.
+            "variant_sheets": ["ID", "ID_TB", "ID_TN", "ID_TB_TN"],
+            "manager_view_sheets": ["TN_VKO", "TN_VKO_TB"],
+            "direct_manager_sheets": [],
+            "growth_combination_sheets": [],
+            "variant_matrix_sheets": [],
+            "percentile_sheets": [],
+            "calc_sheets": ["CALC_V7", "CALC_V7_PERC_ALL"],
+            "spod_variants": ["SPOD_V7", "SPOD_V7_PERCENTILE"],
+            "raw_sheets": ["RAW_T0", "RAW_T1"],
+        },
         "variants": [
             # Наборы ключей для листов Excel.
             #  - name превращается в имя вкладки (ID, ID_TB и т.д.).
@@ -192,10 +233,10 @@ def resolve_sheet_name(file_section: Dict[str, Any], file_key: str) -> str:
     return meta.get("sheet") or file_section.get("sheet", "Sheet1")
 
 
-def parse_contest_date(contest_settings: Mapping[str, Any]) -> str:
+def parse_contest_date(contest_date: str) -> str:
     """Возвращает дату турнира в формате ISO."""
 
-    parsed = dt.datetime.strptime(contest_settings["contest_date"], "%d/%m/%Y")
+    parsed = dt.datetime.strptime(contest_date, "%d/%m/%Y")
     return parsed.strftime("%Y-%m-%d")
 
 
@@ -292,6 +333,90 @@ def build_filter_mask(series: pd.Series, condition: str) -> pd.Series:
         "Фильтр FACT_VALUE должен начинаться с одного из операторов "
         "(>=, <=, >, <, ==, !=, = ) или быть 'all/все'."
     )
+
+
+def _compute_percentile_pair(series: pd.Series) -> Tuple[pd.Series, pd.Series]:
+    """Вспомогательная функция: возвращает (обогнал_%, обогнали_%) для серии."""
+
+    if series.empty:
+        empty = pd.Series(0.0, index=series.index)
+        return empty, empty
+
+    rank_min = series.rank(method="min", ascending=True)
+    rank_max = series.rank(method="max", ascending=True)
+    count_equal = rank_max - rank_min + 1
+    count_less = rank_min - 1
+    count_greater = len(series) - rank_max
+
+    obognal = ((count_less + 0.5 * (count_equal - 1)) / len(series)) * 100
+    obognali = ((count_greater + 0.5 * (count_equal - 1)) / len(series)) * 100
+
+    return obognal, obognali
+
+
+def append_percentile_columns(
+    table: pd.DataFrame,
+    *,
+    value_column: str,
+    tb_column: Optional[str] = None,
+) -> pd.DataFrame:
+    """Добавляет в таблицу колонки процентных рангов (см. Docs/percentile_logic.md)."""
+
+    if value_column not in table.columns:
+        raise KeyError(
+            f"Колонка '{value_column}' не найдена в таблице для расчёта процентилей."
+        )
+
+    prepared = table.copy()
+    values = pd.to_numeric(prepared[value_column], errors="coerce").fillna(0.0)
+
+    obognal_all, obognali_all = _compute_percentile_pair(values)
+    prepared["Обогнал_всего_%"] = obognal_all
+    prepared["Обогнали_меня_всего_%"] = obognali_all
+
+    mask_non_negative = values >= 0
+    if mask_non_negative.any():
+        obognal_ge0, obognali_ge0 = _compute_percentile_pair(values[mask_non_negative])
+        prepared["Обогнал_всего_≥0_%"] = obognal_ge0.reindex(
+            prepared.index, fill_value=0.0
+        )
+        prepared["Обогнали_меня_всего_≥0_%"] = obognali_ge0.reindex(
+            prepared.index, fill_value=0.0
+        )
+    else:
+        prepared["Обогнал_всего_≥0_%"] = 0.0
+        prepared["Обогнали_меня_всего_≥0_%"] = 0.0
+
+    tb_column_present = tb_column and tb_column in prepared.columns
+    tb_columns = [
+        "Обогнал_ТерБанк_%",
+        "Обогнали_меня_ТерБанк_%",
+        "Обогнал_ТерБанк_≥0_%",
+        "Обогнали_меня_ТерБанк_≥0_%",
+    ]
+    if tb_column_present:
+        for column in tb_columns:
+            prepared[column] = 0.0
+
+        for _, group in prepared.groupby(tb_column):
+            subset_values = values.loc[group.index]
+            obognal_tb, obognali_tb = _compute_percentile_pair(subset_values)
+            prepared.loc[group.index, "Обогнал_ТерБанк_%"] = obognal_tb
+            prepared.loc[group.index, "Обогнали_меня_ТерБанк_%"] = obognali_tb
+
+            tb_mask = subset_values >= 0
+            if tb_mask.any():
+                obognal_tb_ge0, obognali_tb_ge0 = _compute_percentile_pair(
+                    subset_values[tb_mask]
+                )
+                idx = subset_values[tb_mask].index
+                prepared.loc[idx, "Обогнал_ТерБанк_≥0_%"] = obognal_tb_ge0
+                prepared.loc[idx, "Обогнали_меня_ТерБанк_≥0_%"] = obognali_tb_ge0
+    else:
+        for column in tb_columns:
+            prepared[column] = 0.0
+
+    return prepared
 
 
 def normalize_string(value: Any) -> str:
@@ -710,25 +835,33 @@ def format_decimal_string(value: float, decimals: int = 5) -> str:
 
 
 def build_spod_dataset(
-    manager_summary: pd.DataFrame,
-    spod_config: Mapping[str, Any],
-    contest_config: Mapping[str, Any],
+    source_table: pd.DataFrame,
+    *,
+    value_column: str,
+    fact_value_filter: str,
+    plan_value: float,
+    priority: str,
+    contest_code: str,
+    tournament_code: str,
+    contest_date: str,
     identifiers: Mapping[str, Any],
     logger: Mapping[str, Any],
+    dataset_name: str,
 ) -> pd.DataFrame:
     """Готовит данные для загрузки в СПОД."""
 
-    # 1) Фильтруем приросты по условию (например, >=0), 2) сортируем по убыванию.
-    mask = build_filter_mask(
-        manager_summary["Прирост"],
-        spod_config["fact_value_filter"],
-    )
-    filtered = manager_summary[mask].copy()
-    filtered = filtered.sort_values(by="Прирост", ascending=False)
+    if value_column not in source_table.columns:
+        raise KeyError(
+            f"Колонка '{value_column}' отсутствует в источнике '{dataset_name}'."
+        )
+
+    mask = build_filter_mask(source_table[value_column], fact_value_filter)
+    filtered = source_table[mask].copy()
+    filtered = filtered.sort_values(by=value_column, ascending=False)
 
     log_debug(
         logger,
-        f"SPOD: после фильтра {spod_config['fact_value_filter']} осталось {len(filtered)} строк",
+        f"SPOD '{dataset_name}': после фильтра {fact_value_filter} осталось {len(filtered)} строк",
         class_name="Exporter",
         func_name="build_spod_dataset",
     )
@@ -736,7 +869,6 @@ def build_spod_dataset(
     dataset = filtered.rename(
         columns={
             SELECTED_MANAGER_ID_COL: "MANAGER_PERSON_NUMBER",
-            "Прирост": "FACT_VALUE",
         }
     )["MANAGER_PERSON_NUMBER"].to_frame()
 
@@ -748,16 +880,16 @@ def build_spod_dataset(
             fill_char=manager_identifier["fill_char"],
         )
     )
-    dataset["CONTEST_CODE"] = contest_config["contest_code"]
-    dataset["TOURNAMENT_CODE"] = contest_config["tournament_code"]
-    dataset["CONTEST_DATE"] = parse_contest_date(contest_config)
-    dataset["PLAN_VALUE"] = format_decimal_string(spod_config["plan_value"])
-    dataset["FACT_VALUE"] = filtered["Прирост"].apply(format_decimal_string)
-    dataset["priority_type"] = spod_config["priority"]
+    dataset["CONTEST_CODE"] = contest_code
+    dataset["TOURNAMENT_CODE"] = tournament_code
+    dataset["CONTEST_DATE"] = parse_contest_date(contest_date)
+    dataset["PLAN_VALUE"] = format_decimal_string(plan_value)
+    dataset["FACT_VALUE"] = filtered[value_column].apply(format_decimal_string)
+    dataset["priority_type"] = priority
 
     log_debug(
         logger,
-        f"SPOD: подготовлено {len(dataset)} строк для выгрузки",
+        f"SPOD '{dataset_name}': подготовлено {len(dataset)} строк для выгрузки",
         class_name="Exporter",
         func_name="build_spod_dataset",
     )
@@ -1077,11 +1209,31 @@ def process_project(project_root: Path) -> None:
     defaults = settings["defaults"]
     identifiers = settings["identifiers"]
     spod_config = settings["spod"]
-    contest_config = settings["contest"]
+    percentile_views_config = settings.get("percentile_views", [])
+    spod_variants_config = settings.get("spod_variants", [])
     manager_views_config = settings.get("manager_views", [])
     direct_manager_views_config = settings.get("direct_manager_views", [])
     growth_combinations_config = settings.get("growth_combinations", [])
+    report_layout = settings.get("report_layout", {})
     variant_definitions = settings["variants"]
+
+    def build_whitelist(key: str) -> Optional[Set[str]]:
+        """Возвращает множество разрешённых листов для указанного блока."""
+
+        values = report_layout.get(key)
+        if values is None:
+            return None
+        return set(values)
+
+    variant_sheet_whitelist = build_whitelist("variant_sheets")
+    manager_view_whitelist = build_whitelist("manager_view_sheets")
+    direct_manager_whitelist = build_whitelist("direct_manager_sheets")
+    growth_combination_whitelist = build_whitelist("growth_combination_sheets")
+    variant_matrix_whitelist = build_whitelist("variant_matrix_sheets")
+    percentile_whitelist = build_whitelist("percentile_sheets")
+    calc_sheet_whitelist = build_whitelist("calc_sheets")
+    spod_variant_whitelist = build_whitelist("spod_variants")
+    raw_sheet_whitelist = build_whitelist("raw_sheets")
 
     # Готовим быстрый индекс по ключам файлов (current / previous).
     file_index = {item["key"]: item for item in file_section["items"]}
@@ -1097,6 +1249,21 @@ def process_project(project_root: Path) -> None:
 
     logger = build_logger(log_dir, spod_config["log_topic"])
     log_info(logger, "Старт обработки проекта YEAR_SPOD_Active_Rost_Ost")
+
+    def should_write(entity_name: str, whitelist: Optional[Set[str]], block_name: str) -> bool:
+        """Проверяет необходимость выгрузки листа согласно report_layout."""
+
+        if whitelist is None:
+            return True
+        if entity_name in whitelist:
+            return True
+        log_debug(
+            logger,
+            f"Элемент '{entity_name}' пропущен (report_layout ограничил блок '{block_name}')",
+            class_name="Exporter",
+            func_name="process_project",
+        )
+        return False
 
     try:
         current_file = input_dir / current_meta["file_name"]
@@ -1145,7 +1312,6 @@ def process_project(project_root: Path) -> None:
             variant_tables[name] = table
 
         manager_view_tables: Dict[str, pd.DataFrame] = {}
-        spod_summary_df: Optional[pd.DataFrame] = None
         for view_cfg in manager_views_config:
             source_variant = view_cfg["source_variant"]
             variant_df = variant_tables[source_variant]
@@ -1160,13 +1326,6 @@ def process_project(project_root: Path) -> None:
                 manager_columns=manager_columns,
             )
             manager_view_tables[view_cfg["name"]] = summary_df
-            if view_cfg.get("use_for_spod"):
-                spod_summary_df = summary_df
-
-        if spod_summary_df is None:
-            raise ValueError(
-                "Не найден manager_view с use_for_spod=True. Укажите хотя бы один сценарий в настройках."
-            )
 
         direct_manager_tables: Dict[str, pd.DataFrame] = {}
         for direct_cfg in direct_manager_views_config:
@@ -1193,28 +1352,125 @@ def process_project(project_root: Path) -> None:
                 )
             growth_combination_tables[combo_cfg["name"]] = source_table.copy()
 
-        # Строим матрицу всех 8 вариантов расчета
         log_info(logger, "Строю матрицу всех вариантов расчета (8 комбинаций)")
-        variant_matrix = build_variant_matrix(
+        variant_matrix_tables = build_variant_matrix(
             current_df=current_df,
             previous_df=previous_df,
             defaults=defaults,
             identifiers=identifiers,
             logger=logger,
         )
-        
-        # Выбираем вариант для CSV из настроек
-        csv_variant_num = spod_config.get("csv_variant", 1)
-        if csv_variant_num not in variant_matrix:
-            raise ValueError(f"Вариант {csv_variant_num} не найден в матрице. Доступны варианты 1-8.")
-        
-        csv_variant_df = variant_matrix[csv_variant_num]
-        log_info(logger, f"Для CSV выбран вариант {csv_variant_num}")
-        
-        # Формируем SPOD датасет из выбранного варианта
-        spod_dataset = build_spod_dataset(
-            csv_variant_df, spod_config, contest_config, identifiers, logger
-        )
+
+        percentile_view_tables: Dict[str, pd.DataFrame] = {}
+        percentile_sheet_names: Dict[str, str] = {}
+        percentile_cache: Dict[Tuple[str, str, str, str], pd.DataFrame] = {}
+
+        def resolve_table(source_type: str, source_name: Any) -> pd.DataFrame:
+            if source_type == "manager_view":
+                return manager_view_tables[source_name]
+            if source_type == "direct_manager_view":
+                return direct_manager_tables[source_name]
+            if source_type == "growth_combination":
+                return growth_combination_tables[source_name]
+            if source_type == "variant_table":
+                return variant_tables[source_name]
+            if source_type == "variant_matrix":
+                key = int(source_name)
+                if key not in variant_matrix_tables:
+                    raise KeyError(f"Вариант матрицы {key} отсутствует.")
+                return variant_matrix_tables[key]
+            if source_type == "percentile_view":
+                return percentile_view_tables[source_name]
+            raise ValueError(
+                "Недопустимый source_type. Доступные значения: "
+                "manager_view, direct_manager_view, growth_combination, variant_table, "
+                "variant_matrix, percentile_view."
+            )
+
+        for view_cfg in percentile_views_config:
+            value_column = view_cfg.get("value_column", "Прирост")
+            tb_column = view_cfg.get("tb_column")
+            metric_column = view_cfg.get("metric_column")
+            if not metric_column:
+                raise ValueError(
+                    f"Не указан metric_column для percentile_view '{view_cfg['name']}'"
+                )
+            cache_key = (
+                view_cfg.get("source_type", "manager_view"),
+                view_cfg["source_name"],
+                value_column,
+                tb_column or "",
+            )
+            if cache_key not in percentile_cache:
+                base_table = resolve_table(cache_key[0], cache_key[1])
+                percentile_cache[cache_key] = append_percentile_columns(
+                    base_table,
+                    value_column=value_column,
+                    tb_column=tb_column,
+                )
+            augmented = percentile_cache[cache_key]
+            if metric_column not in augmented.columns:
+                raise KeyError(
+                    f"Колонка '{metric_column}' недоступна в percentile_view '{view_cfg['name']}'."
+                )
+            columns_to_keep = view_cfg.get("columns") or [
+                SELECTED_MANAGER_ID_COL,
+                SELECTED_MANAGER_NAME_COL,
+                value_column,
+                metric_column,
+            ]
+            view_df = augmented[columns_to_keep].copy()
+            metric_label = view_cfg.get("metric_label")
+            if metric_label and metric_label != metric_column:
+                view_df = view_df.rename(columns={metric_column: metric_label})
+            percentile_view_tables[view_cfg["name"]] = view_df
+            percentile_sheet_names[view_cfg["name"]] = view_cfg.get(
+                "sheet_name", view_cfg["name"]
+            )
+
+        if not spod_variants_config:
+            raise ValueError(
+                "В настройках отсутствуют spod_variants. Добавьте хотя бы один сценарий."
+            )
+
+        spod_dataset_tables: Dict[str, pd.DataFrame] = {}
+        csv_frames: List[pd.DataFrame] = []
+        calc_sheets_to_write: List[Dict[str, Any]] = []
+        spod_sheet_names: Dict[str, str] = {}
+
+        for spod_cfg in spod_variants_config:
+            source_type = spod_cfg.get("source_type", "manager_view")
+            source_name = spod_cfg["source_name"]
+            source_table = resolve_table(source_type, source_name)
+            value_column = spod_cfg.get("value_column", "Прирост")
+            dataset = build_spod_dataset(
+                source_table,
+                value_column=value_column,
+                fact_value_filter=spod_cfg.get("fact_value_filter", "all"),
+                plan_value=spod_cfg.get("plan_value", 0.0),
+                priority=spod_cfg.get("priority", "1"),
+                contest_code=spod_cfg["contest_code"],
+                tournament_code=spod_cfg["tournament_code"],
+                contest_date=spod_cfg["contest_date"],
+                identifiers=identifiers,
+                logger=logger,
+                dataset_name=spod_cfg["name"],
+            )
+            spod_dataset_tables[spod_cfg["name"]] = dataset
+            spod_sheet_names[spod_cfg["name"]] = spod_cfg.get(
+                "spod_sheet_name", spod_cfg["name"]
+            )
+            if spod_cfg.get("include_in_csv"):
+                csv_frames.append(dataset)
+            calc_sheet_name = spod_cfg.get("calc_sheet_name")
+            if calc_sheet_name:
+                calc_sheets_to_write.append(
+                    {
+                        "sheet_name": calc_sheet_name,
+                        "table": source_table,
+                        "owner": spod_cfg["name"],
+                    }
+                )
 
         report_suffix = timestamp_suffix()
         excel_name = f"{spod_config['file_prefix']}{report_suffix}.xlsx"
@@ -1227,36 +1483,56 @@ def process_project(project_root: Path) -> None:
         )
 
         with pd.ExcelWriter(excel_path, engine="openpyxl") as writer:
+            written_sheets: Set[str] = set()
+
+            def write_sheet(sheet_name: str, table: pd.DataFrame) -> None:
+                if sheet_name in written_sheets:
+                    log_debug(
+                        logger,
+                        f"Лист {sheet_name} уже создан — пропускаю повторную запись",
+                        class_name="Exporter",
+                        func_name="process_project",
+                    )
+                    return
+                table.to_excel(writer, sheet_name=sheet_name, index=False)
+                format_excel_sheet(writer, sheet_name, table)
+                written_sheets.add(sheet_name)
+
             for sheet_name, table in variant_tables.items():
+                if not should_write(sheet_name, variant_sheet_whitelist, "variant_sheets"):
+                    continue
                 printable = rename_output_columns(table, alias_to_source)
-                printable.to_excel(writer, sheet_name=sheet_name, index=False)
-                format_excel_sheet(writer, sheet_name, printable)
+                write_sheet(sheet_name, printable)
 
             for sheet_name, summary_table in manager_view_tables.items():
+                if not should_write(sheet_name, manager_view_whitelist, "manager_view_sheets"):
+                    continue
                 display_table = summary_table.rename(
                     columns={
                         SELECTED_MANAGER_ID_COL: "Таб. номер ВКО (выбранный)",
                         SELECTED_MANAGER_NAME_COL: "ВКО (выбранный)",
                     }
                 )
-                display_table.to_excel(writer, sheet_name=sheet_name, index=False)
-                format_excel_sheet(writer, sheet_name, display_table)
+                write_sheet(sheet_name, display_table)
 
             for sheet_name, summary_table in direct_manager_tables.items():
+                if not should_write(sheet_name, direct_manager_whitelist, "direct_manager_sheets"):
+                    continue
                 display_table = summary_table.rename(
                     columns={
                         DIRECT_MANAGER_ID_COL: "Таб. номер ВКО (по файлу)",
                         DIRECT_MANAGER_NAME_COL: "ВКО (по файлу)",
                     }
                 )
-                display_table.to_excel(writer, sheet_name=sheet_name, index=False)
-                format_excel_sheet(writer, sheet_name, display_table)
+                write_sheet(sheet_name, display_table)
 
             for sheet_name, combo_table in growth_combination_tables.items():
-                combo_table.to_excel(writer, sheet_name=sheet_name, index=False)
-                format_excel_sheet(writer, sheet_name, combo_table)
+                if not should_write(
+                    sheet_name, growth_combination_whitelist, "growth_combination_sheets"
+                ):
+                    continue
+                write_sheet(sheet_name, combo_table)
 
-            # Сохраняем все варианты матрицы в Excel
             variant_names = {
                 1: "V1_ВКО_безТБ_КМ_пофайлу",
                 2: "V2_ВКО_сТБ_КМ_пофайлу",
@@ -1267,26 +1543,53 @@ def process_project(project_root: Path) -> None:
                 7: "V7_ИНН_безТБ_КМ_последний",
                 8: "V8_ИНН_сТБ_КМ_последний",
             }
-            for variant_num, variant_df in variant_matrix.items():
+            for variant_num, variant_df in variant_matrix_tables.items():
                 sheet_name = variant_names.get(variant_num, f"VARIANT_{variant_num}")
-                variant_df.to_excel(writer, sheet_name=sheet_name, index=False)
-                format_excel_sheet(writer, sheet_name, variant_df)
+                if not should_write(sheet_name, variant_matrix_whitelist, "variant_matrix_sheets"):
+                    continue
+                write_sheet(sheet_name, variant_df)
 
-            spod_dataset.to_excel(writer, sheet_name="SPOD", index=False)
-            format_excel_sheet(writer, "SPOD", spod_dataset)
+            for view_name, view_table in percentile_view_tables.items():
+                sheet_name = percentile_sheet_names.get(view_name, view_name)
+                if not should_write(sheet_name, percentile_whitelist, "percentile_sheets"):
+                    continue
+                write_sheet(sheet_name, view_table)
+
+            for calc_meta in calc_sheets_to_write:
+                owner_name = calc_meta["owner"]
+                if not should_write(owner_name, spod_variant_whitelist, "spod_variants"):
+                    continue
+                sheet_name = calc_meta["sheet_name"]
+                if not should_write(sheet_name, calc_sheet_whitelist, "calc_sheets"):
+                    continue
+                write_sheet(sheet_name, calc_meta["table"])
+
+            for spod_name, dataset in spod_dataset_tables.items():
+                if not should_write(spod_name, spod_variant_whitelist, "spod_variants"):
+                    continue
+                sheet_name = spod_sheet_names.get(spod_name, spod_name)
+                write_sheet(sheet_name, dataset)
 
             raw_sheets = [
                 ("RAW_T0", format_raw_sheet(current_df, alias_to_source)),
                 ("RAW_T1", format_raw_sheet(previous_df, alias_to_source)),
             ]
             for sheet_name, raw_table in raw_sheets:
-                raw_table.to_excel(writer, sheet_name=sheet_name, index=False)
-                format_excel_sheet(writer, sheet_name, raw_table)
+                if not should_write(sheet_name, raw_sheet_whitelist, "raw_sheets"):
+                    continue
+                write_sheet(sheet_name, raw_table)
 
         csv_name = f"{spod_config['file_prefix']}_SPOD{report_suffix}.csv"
         csv_path = output_dir / csv_name
-        log_info(logger, f"Сохраняю CSV-файл {csv_name}")
-        spod_dataset.to_csv(csv_path, index=False, sep=";", quoting=csv.QUOTE_MINIMAL)
+        if csv_frames:
+            log_info(logger, f"Сохраняю CSV-файл {csv_name}")
+            csv_dataset = pd.concat(csv_frames, ignore_index=True)
+            csv_dataset.to_csv(csv_path, index=False, sep=";", quoting=csv.QUOTE_MINIMAL)
+        else:
+            log_info(
+                logger,
+                "CSV-файл SPOD не сформирован: нет вариантов с include_in_csv=True",
+            )
 
         log_info(logger, "Обработка успешно завершена")
     except Exception as exc:
