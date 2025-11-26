@@ -110,7 +110,7 @@ def build_settings_tree() -> SettingsTree:
             "plan_value": 0.0,
             "priority": "1",
             "fact_value_filter": ">0",
-            "csv_variant": 1,
+            "csv_variant": 7,
         },
         "contest": {
             # Официальные коды и дата турнира (строка в формате DD/MM/YYYY).
@@ -468,7 +468,18 @@ def select_best_manager(
     logger: Mapping[str, Any],
     variant_name: str,
 ) -> pd.DataFrame:
-    """Определяет менеджера с максимальным фактом для ключа."""
+    """Определяет доминантного менеджера (по сумме факта) для каждого ключа.
+
+    Алгоритм:
+    1. Формируется составной ключ (например, client_id или client_id+tb) и
+       расширяется парой полей менеджера (ФИО + табельный номер), если те ещё
+       не входят в key_columns.
+    2. Группируем данные по (ключ, manager_id, manager_name) и суммируем
+       fact_value_clean, тем самым получаем суммарный вклад каждого ТН по
+       конкретному клиенту/объекту.
+    3. Выбираем строку с максимальной суммой. Если суммы равны, pandas idxmax
+       вернёт первую попавшуюся — этого достаточно по ТЗ.
+    """
 
     additional_columns = [
         column for column in ("manager_name", "manager_id") if column not in key_columns
