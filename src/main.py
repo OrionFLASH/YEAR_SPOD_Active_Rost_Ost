@@ -95,35 +95,26 @@ def build_settings_tree() -> SettingsTree:
             "file_prefix": "YEAR_SPOD_Active_Rost_ost",
             "log_topic": "spod",
         },
-        "percentile_views": [
-            {
-                "name": "V7_PERC_ALL",
-                "source_type": "manager_view",
-                "source_name": "TN_VKO",
-                "sheet_name": "V7_PERCENTILE_ALL",
-                "value_column": "Прирост",
-                "tb_column": None,
-                "metric_column": "Обогнал_всего_%",
-                "metric_label": "Обогнал всего, %",
-            },
-            {
-                "name": "V7_PERC_TB",
-                "source_type": "manager_view",
-                "source_name": "TN_VKO_TB",
-                "sheet_name": "V7_PERCENTILE_TB",
-                "value_column": "Прирост",
-                "tb_column": "ТБ",
-                "metric_column": "Обогнал_ТерБанк_%",
-                "metric_label": "Обогнал внутри ТБ, %",
-            },
-        ],
+        "scenario": {
+            # name используется в логах/именах листов.
+            "name": "SCENARIO_MAIN",
+            # key_mode: client (агрегация по ИНН) или manager (агрегация по табельному номеру).
+            "key_mode": "client",
+            # include_tb: True → добавляем ТБ в ключ и считаем показатели в разрезе ТерБанков.
+            "include_tb": False,
+            # manager_assignment: latest (последний доступный КМ) или per_file (T0 и T1 отдельно).
+            "manager_assignment": "latest",
+            # Имена листов в Excel (можно переопределить).
+            "detail_sheet_name": "DETAIL_SCENARIO",
+            "summary_sheet_name": "SUMMARY_TN",
+            "percentile_sheet_name": "PERCENTILE_TN",
+        },
         "spod_variants": [
             {
-                "name": "SPOD_V7",
-                "source_type": "manager_view",
-                "source_name": "TN_VKO",
-                "calc_sheet_name": "CALC_V7",
-                "spod_sheet_name": "SPOD_V7",
+                "name": "SPOD_SCENARIO",
+                "source_type": "scenario_summary",
+                "calc_sheet_name": "CALC_SCENARIO",
+                "spod_sheet_name": "SPOD_SCENARIO",
                 "value_column": "Прирост",
                 "fact_value_filter": ">0",
                 "plan_value": 0.0,
@@ -134,12 +125,11 @@ def build_settings_tree() -> SettingsTree:
                 "include_in_csv": True,
             },
             {
-                "name": "SPOD_V7_PERCENTILE",
-                "source_type": "percentile_view",
-                "source_name": "V7_PERC_ALL",
-                "calc_sheet_name": "CALC_V7_PERC_ALL",
-                "spod_sheet_name": "SPOD_V7_PERC_ALL",
-                "value_column": "Обогнал всего, %",
+                "name": "SPOD_SCENARIO_PERCENTILE",
+                "source_type": "scenario_percentile",
+                "calc_sheet_name": "CALC_SCENARIO_PERC",
+                "spod_sheet_name": "SPOD_SCENARIO_PERC",
+                "value_column": "Обогнал_всего_%",
                 "fact_value_filter": ">=0",
                 "plan_value": 0.0,
                 "priority": "1",
@@ -149,55 +139,18 @@ def build_settings_tree() -> SettingsTree:
                 "include_in_csv": True,
             },
         ],
-        "manager_views": [
-            {
-                "name": "TN_VKO",
-                "source_variant": "ID_TN",
-                "include_tb": False,
-                "manager_mode": "latest",
-            },
-            {
-                "name": "TN_VKO_TB",
-                "source_variant": "ID_TB_TN",
-                "include_tb": True,
-                "manager_mode": "latest",
-            },
-        ],
-        "direct_manager_views": [
-            {"name": "MANAGER_DIRECT", "include_tb": False},
-            {"name": "MANAGER_DIRECT_TB", "include_tb": True},
-        ],
-        "growth_combinations": [
-            {
-                "name": "COMBO_VKO_NO_TB",
-                "type": "direct",
-                "source": "MANAGER_DIRECT",
-                "description": "Прирост по ВКО без учёта ТБ (сумма по каждому КМ в T0 минус сумма по нему же в T1).",
-            },
-        ],
         "report_layout": {
             # Управляет тем, какие листы попадают в основной Excel (пустой список = блок отключён).
             # Отсутствие ключа означает сохранение предыдущего поведения и выгрузку всех листов блока.
-            "variant_sheets": ["ID", "ID_TB", "ID_TN", "ID_TB_TN"],
-            "manager_view_sheets": ["TN_VKO", "TN_VKO_TB"],
-            "direct_manager_sheets": [],
-            "growth_combination_sheets": [],
-            "variant_matrix_sheets": [],
-            "percentile_sheets": [],
-            "calc_sheets": ["CALC_V7", "CALC_V7_PERC_ALL"],
-            "spod_variants": ["SPOD_V7", "SPOD_V7_PERCENTILE"],
+            # detail/summary/percentile — новые категории отчётов сценария.
+            "detail_sheets": ["DETAIL_SCENARIO"],
+            "summary_sheets": ["SUMMARY_TN"],
+            "percentile_sheets": ["PERCENTILE_TN"],
+            "calc_sheets": ["CALC_SCENARIO", "CALC_SCENARIO_PERC"],
+            "spod_variants": ["SPOD_SCENARIO", "SPOD_SCENARIO_PERCENTILE"],
+            # raw_sheets — очищенные исходники T-0/T-1.
             "raw_sheets": ["RAW_T0", "RAW_T1"],
         },
-        "variants": [
-            # Наборы ключей для листов Excel.
-            #  - name превращается в имя вкладки (ID, ID_TB и т.д.).
-            #  - columns — список alias, по которым группируются данные.
-            #  - Можно добавить собственный лист, указав аналогичный словарь {"name": "...", "columns": [...]}.
-            {"name": "ID", "columns": ["client_id"]},
-            {"name": "ID_TB", "columns": ["client_id", "tb"]},
-            {"name": "ID_TN", "columns": ["client_id", "manager_id"]},
-            {"name": "ID_TB_TN", "columns": ["client_id", "tb", "manager_id"]},
-        ],
     }
 
 
@@ -416,7 +369,212 @@ def append_percentile_columns(
         for column in tb_columns:
             prepared[column] = 0.0
 
+    percent_columns = [
+        "Обогнал_всего_%",
+        "Обогнали_меня_всего_%",
+        "Обогнал_всего_≥0_%",
+        "Обогнали_меня_всего_≥0_%",
+        "Обогнал_ТерБанк_%",
+        "Обогнали_меня_ТерБанк_%",
+        "Обогнал_ТерБанк_≥0_%",
+        "Обогнали_меня_ТерБанк_≥0_%",
+    ]
+    for column in percent_columns:
+        if column in prepared.columns:
+            prepared[column] = prepared[column].round(2)
+
     return prepared
+
+
+def build_scenario_keys(key_mode: str, include_tb: bool) -> List[str]:
+    """Возвращает список колонок для ключа сценария."""
+
+    mapping = {
+        "client": ["client_id"],
+        "manager": ["manager_id"],
+    }
+    if key_mode not in mapping:
+        raise ValueError("key_mode должен быть client или manager")
+    keys = list(mapping[key_mode])
+    if include_tb:
+        keys.append("tb")
+    return keys
+
+
+def _ensure_manager_identity(
+    value: Any,
+    *,
+    default_value: str,
+    identifiers: Mapping[str, Any],
+) -> str:
+    """Возвращает табельный номер с учётом обязательной длины."""
+
+    if not value or str(value).strip() == "":
+        return format_identifier(
+            default_value,
+            total_length=identifiers["manager_id"]["total_length"],
+            fill_char=identifiers["manager_id"]["fill_char"],
+        )
+    return format_identifier(
+        value,
+        total_length=identifiers["manager_id"]["total_length"],
+        fill_char=identifiers["manager_id"]["fill_char"],
+    )
+
+
+def build_assignment_table(
+    variant_df: pd.DataFrame,
+    *,
+    key_columns: List[str],
+    manager_assignment: str,
+    defaults: Mapping[str, Any],
+    identifiers: Mapping[str, Any],
+    logger: Mapping[str, Any],
+    scenario_name: str,
+) -> pd.DataFrame:
+    """Возвращает таблицу назначений (ключ ↔ выбранный КМ)."""
+
+    if manager_assignment not in {"latest", "per_file"}:
+        raise ValueError("manager_assignment должен быть latest или per_file.")
+
+    if variant_df.empty:
+        columns = key_columns + [
+            SELECTED_MANAGER_ID_COL,
+            SELECTED_MANAGER_NAME_COL,
+            "Источник",
+            "Факт_T0",
+            "Факт_T1",
+            "Прирост",
+        ]
+        return pd.DataFrame(columns=columns)
+
+    if manager_assignment == "latest":
+        assignments = variant_df[key_columns].copy()
+        assignments[SELECTED_MANAGER_ID_COL] = variant_df["Таб. номер ВКО_Актуальный"]
+        assignments[SELECTED_MANAGER_NAME_COL] = variant_df["ВКО_Актуальный"]
+        assignments["Источник"] = "LATEST"
+        assignments["Факт_T0"] = variant_df["Факт_T0"].fillna(0.0)
+        assignments["Факт_T1"] = variant_df["Факт_T1"].fillna(0.0)
+        assignments["Прирост"] = variant_df["Прирост"].fillna(0.0)
+        log_debug(
+            logger,
+            f"{scenario_name}: назначено {len(assignments)} записей (режим latest)",
+            class_name="Scenario",
+            func_name="build_assignment_table",
+        )
+        return assignments
+
+    default_name = defaults["manager_name"]
+    default_id = _ensure_manager_identity(
+        defaults["manager_id"], default_value=defaults["manager_id"], identifiers=identifiers
+    )
+
+    records: List[Dict[str, Any]] = []
+    for row in variant_df.itertuples(index=False):
+        base = {column: getattr(row, column, None) for column in key_columns}
+        growth = getattr(row, "Прирост", 0.0) or 0.0
+        fact_t0 = getattr(row, "Факт_T0", 0.0) or 0.0
+        fact_t1 = getattr(row, "Факт_T1", 0.0) or 0.0
+
+        manager_t0 = getattr(row, "Таб. номер ВКО_T0", None)
+        manager_name_t0 = getattr(row, "ВКО_T0", None) or default_name
+        manager_t0 = _ensure_manager_identity(
+            manager_t0 or default_id, default_value=default_id, identifiers=identifiers
+        )
+
+        manager_t1 = getattr(row, "Таб. номер ВКО_T1", None)
+        manager_name_t1 = getattr(row, "ВКО_T1", None) or default_name
+        manager_t1 = _ensure_manager_identity(
+            manager_t1 or default_id, default_value=default_id, identifiers=identifiers
+        )
+
+        if fact_t0 or growth > 0:
+            record = {
+                **base,
+                SELECTED_MANAGER_ID_COL: manager_t0,
+                SELECTED_MANAGER_NAME_COL: manager_name_t0,
+                "Источник": "T0",
+                "Факт_T0": fact_t0,
+                "Факт_T1": 0.0,
+                "Прирост": max(growth, 0.0),
+            }
+            records.append(record)
+
+        if fact_t1 or growth < 0:
+            record = {
+                **base,
+                SELECTED_MANAGER_ID_COL: manager_t1,
+                SELECTED_MANAGER_NAME_COL: manager_name_t1,
+                "Источник": "T1",
+                "Факт_T0": 0.0,
+                "Факт_T1": fact_t1,
+                "Прирост": min(growth, 0.0),
+            }
+            records.append(record)
+
+    assignments = pd.DataFrame(records)
+    if assignments.empty:
+        columns = key_columns + [
+            SELECTED_MANAGER_ID_COL,
+            SELECTED_MANAGER_NAME_COL,
+            "Источник",
+            "Факт_T0",
+            "Факт_T1",
+            "Прирост",
+        ]
+        assignments = pd.DataFrame(columns=columns)
+
+    log_debug(
+        logger,
+        f"{scenario_name}: назначено {len(assignments)} записей (режим per_file)",
+        class_name="Scenario",
+        func_name="build_assignment_table",
+    )
+    return assignments
+
+
+def build_assignment_summary(
+    assignment_df: pd.DataFrame,
+    *,
+    include_tb: bool,
+    logger: Mapping[str, Any],
+    summary_name: str,
+) -> pd.DataFrame:
+    """Суммирует факты/приросты по выбранным менеджерам."""
+
+    group_columns = [SELECTED_MANAGER_ID_COL, SELECTED_MANAGER_NAME_COL]
+    tb_column_name: Optional[str] = None
+    if include_tb:
+        if "ТБ" in assignment_df.columns:
+            tb_column_name = "ТБ"
+        elif "tb" in assignment_df.columns:
+            tb_column_name = "tb"
+    if tb_column_name:
+        group_columns.append(tb_column_name)
+
+    if assignment_df.empty:
+        return pd.DataFrame(
+            columns=group_columns + ["Факт_T0", "Факт_T1", "Прирост", "Количество записей"]
+        )
+
+    numeric_columns = ["Факт_T0", "Факт_T1", "Прирост"]
+    summary = (
+        assignment_df.groupby(group_columns, dropna=False)[numeric_columns]
+        .sum()
+        .reset_index()
+    )
+    counts = assignment_df.groupby(group_columns, dropna=False).size().reset_index(name="Количество записей")
+    summary = summary.merge(counts, on=group_columns, how="left")
+    if tb_column_name == "tb":
+        summary = summary.rename(columns={"tb": "ТБ"})
+
+    log_debug(
+        logger,
+        f"{summary_name}: сформирована сводная таблица на {len(summary)} менеджеров",
+        class_name="Scenario",
+        func_name="build_assignment_summary",
+    )
+    return summary
 
 
 def normalize_string(value: Any) -> str:
@@ -816,7 +974,12 @@ def format_excel_sheet(writer: pd.ExcelWriter, sheet_name: str, df: pd.DataFrame
 
         if worksheet.max_row >= 2:
             data_range = worksheet[f"{column_letter}2": f"{column_letter}{worksheet.max_row}"]
-            if column.startswith("Факт") or column == "Прирост":
+            if (
+                column.startswith("Факт")
+                or column == "Прирост"
+                or "Обогнал" in column
+                or "Обогнали" in column
+            ):
                 for cell_tuple in data_range:
                     for item in cell_tuple:
                         item.number_format = "#,##0.00"
@@ -1209,13 +1372,8 @@ def process_project(project_root: Path) -> None:
     defaults = settings["defaults"]
     identifiers = settings["identifiers"]
     spod_config = settings["spod"]
-    percentile_views_config = settings.get("percentile_views", [])
     spod_variants_config = settings.get("spod_variants", [])
-    manager_views_config = settings.get("manager_views", [])
-    direct_manager_views_config = settings.get("direct_manager_views", [])
-    growth_combinations_config = settings.get("growth_combinations", [])
     report_layout = settings.get("report_layout", {})
-    variant_definitions = settings["variants"]
 
     def build_whitelist(key: str) -> Optional[Set[str]]:
         """Возвращает множество разрешённых листов для указанного блока."""
@@ -1225,12 +1383,9 @@ def process_project(project_root: Path) -> None:
             return None
         return set(values)
 
-    variant_sheet_whitelist = build_whitelist("variant_sheets")
-    manager_view_whitelist = build_whitelist("manager_view_sheets")
-    direct_manager_whitelist = build_whitelist("direct_manager_sheets")
-    growth_combination_whitelist = build_whitelist("growth_combination_sheets")
-    variant_matrix_whitelist = build_whitelist("variant_matrix_sheets")
-    percentile_whitelist = build_whitelist("percentile_sheets")
+    detail_sheet_whitelist = build_whitelist("detail_sheets")
+    summary_sheet_whitelist = build_whitelist("summary_sheets")
+    percentile_sheet_whitelist = build_whitelist("percentile_sheets")
     calc_sheet_whitelist = build_whitelist("calc_sheets")
     spod_variant_whitelist = build_whitelist("spod_variants")
     raw_sheet_whitelist = build_whitelist("raw_sheets")
@@ -1294,66 +1449,22 @@ def process_project(project_root: Path) -> None:
             logger,
         )
 
-        variant_tables: Dict[str, pd.DataFrame] = {}
-        for variant in variant_definitions:
-            name = variant["name"]
-            columns = variant["columns"]
-            # Для каждого набора ключей строим отдельный лист (ID / ID_TB / ...).
-            log_info(logger, f"Формирую лист {name}")
-            table = assemble_variant_dataset(
-                variant_name=name,
-                key_columns=columns,
-                current_df=current_df,
-                previous_df=previous_df,
-                defaults=defaults,
-                identifiers=identifiers,
-                logger=logger,
-            )
-            variant_tables[name] = table
+        scenario_cfg = settings["scenario"]
+        scenario_name = scenario_cfg.get("name", "SCENARIO")
+        key_mode = scenario_cfg.get("key_mode", "client")
+        include_tb_scenario = scenario_cfg.get("include_tb", False)
+        manager_assignment = scenario_cfg.get("manager_assignment", "latest")
+        key_columns = build_scenario_keys(key_mode, include_tb_scenario)
 
-        manager_view_tables: Dict[str, pd.DataFrame] = {}
-        for view_cfg in manager_views_config:
-            source_variant = view_cfg["source_variant"]
-            variant_df = variant_tables[source_variant]
-            manager_mode = view_cfg.get("manager_mode", "latest")
-            manager_columns = get_manager_columns(manager_mode)
-            include_tb = view_cfg.get("include_tb", False)
-            summary_df = build_manager_summary(
-                variant_df=variant_df,
-                include_tb=include_tb,
-                logger=logger,
-                summary_name=view_cfg["name"],
-                manager_columns=manager_columns,
-            )
-            manager_view_tables[view_cfg["name"]] = summary_df
+        log_info(
+            logger,
+            f"Сценарий {scenario_name}: key_mode={key_mode}, include_tb={include_tb_scenario}, "
+            f"manager_assignment={manager_assignment}",
+        )
 
-        direct_manager_tables: Dict[str, pd.DataFrame] = {}
-        for direct_cfg in direct_manager_views_config:
-            summary_df = build_direct_manager_summary(
-                current_df=current_df,
-                previous_df=previous_df,
-                include_tb=direct_cfg.get("include_tb", False),
-                logger=logger,
-                summary_name=direct_cfg["name"],
-            )
-            direct_manager_tables[direct_cfg["name"]] = summary_df
-
-        growth_combination_tables: Dict[str, pd.DataFrame] = {}
-        for combo_cfg in growth_combinations_config:
-            source_type = combo_cfg.get("type")
-            source_name = combo_cfg["source"]
-            if source_type == "manager_view":
-                source_table = manager_view_tables[source_name]
-            elif source_type == "direct":
-                source_table = direct_manager_tables[source_name]
-            else:
-                raise ValueError(
-                    "Недопустимое значение combination.type. Используйте manager_view или direct."
-                )
-            growth_combination_tables[combo_cfg["name"]] = source_table.copy()
-
-        log_info(logger, "Строю матрицу всех вариантов расчета (8 комбинаций)")
-        variant_matrix_tables = build_variant_matrix(
+        scenario_dataset = assemble_variant_dataset(
+            variant_name=scenario_name,
+            key_columns=key_columns,
             current_df=current_df,
             previous_df=previous_df,
             defaults=defaults,
@@ -1361,71 +1472,55 @@ def process_project(project_root: Path) -> None:
             logger=logger,
         )
 
-        percentile_view_tables: Dict[str, pd.DataFrame] = {}
-        percentile_sheet_names: Dict[str, str] = {}
-        percentile_cache: Dict[Tuple[str, str, str, str], pd.DataFrame] = {}
+        assignment_df = build_assignment_table(
+            scenario_dataset,
+            key_columns=key_columns,
+            manager_assignment=manager_assignment,
+            defaults=defaults,
+            identifiers=identifiers,
+            logger=logger,
+            scenario_name=scenario_name,
+        )
+
+        detail_table = rename_output_columns(assignment_df, alias_to_source)
+        summary_table = build_assignment_summary(
+            assignment_df,
+            include_tb=include_tb_scenario,
+            logger=logger,
+            summary_name=f"{scenario_name}_SUMMARY",
+        )
+        percentile_table = append_percentile_columns(
+            summary_table,
+            value_column="Прирост",
+            tb_column="ТБ" if include_tb_scenario else None,
+        )
+
+        detail_sheet_name = scenario_cfg.get("detail_sheet_name", "DETAIL_SCENARIO")
+        summary_sheet_name = scenario_cfg.get("summary_sheet_name", "SUMMARY_TN")
+        percentile_sheet_name = scenario_cfg.get("percentile_sheet_name", "PERCENTILE_TN")
+
+        table_registry: Dict[str, pd.DataFrame] = {
+            "scenario_assignment": assignment_df,
+            "scenario_detail": detail_table,
+            "scenario_summary": summary_table,
+            "scenario_percentile": percentile_table,
+        }
+        raw_tables = {
+            "RAW_T0": format_raw_sheet(current_df, alias_to_source),
+            "RAW_T1": format_raw_sheet(previous_df, alias_to_source),
+        }
 
         def resolve_table(source_type: str, source_name: Any) -> pd.DataFrame:
-            if source_type == "manager_view":
-                return manager_view_tables[source_name]
-            if source_type == "direct_manager_view":
-                return direct_manager_tables[source_name]
-            if source_type == "growth_combination":
-                return growth_combination_tables[source_name]
-            if source_type == "variant_table":
-                return variant_tables[source_name]
-            if source_type == "variant_matrix":
-                key = int(source_name)
-                if key not in variant_matrix_tables:
-                    raise KeyError(f"Вариант матрицы {key} отсутствует.")
-                return variant_matrix_tables[key]
-            if source_type == "percentile_view":
-                return percentile_view_tables[source_name]
+            if source_type in table_registry:
+                return table_registry[source_type]
+            if source_type == "raw":
+                if source_name not in raw_tables:
+                    raise KeyError(f"Недоступный raw-источник '{source_name}'")
+                return raw_tables[source_name]
             raise ValueError(
                 "Недопустимый source_type. Доступные значения: "
-                "manager_view, direct_manager_view, growth_combination, variant_table, "
-                "variant_matrix, percentile_view."
-            )
-
-        for view_cfg in percentile_views_config:
-            value_column = view_cfg.get("value_column", "Прирост")
-            tb_column = view_cfg.get("tb_column")
-            metric_column = view_cfg.get("metric_column")
-            if not metric_column:
-                raise ValueError(
-                    f"Не указан metric_column для percentile_view '{view_cfg['name']}'"
-                )
-            cache_key = (
-                view_cfg.get("source_type", "manager_view"),
-                view_cfg["source_name"],
-                value_column,
-                tb_column or "",
-            )
-            if cache_key not in percentile_cache:
-                base_table = resolve_table(cache_key[0], cache_key[1])
-                percentile_cache[cache_key] = append_percentile_columns(
-                    base_table,
-                    value_column=value_column,
-                    tb_column=tb_column,
-                )
-            augmented = percentile_cache[cache_key]
-            if metric_column not in augmented.columns:
-                raise KeyError(
-                    f"Колонка '{metric_column}' недоступна в percentile_view '{view_cfg['name']}'."
-                )
-            columns_to_keep = view_cfg.get("columns") or [
-                SELECTED_MANAGER_ID_COL,
-                SELECTED_MANAGER_NAME_COL,
-                value_column,
-                metric_column,
-            ]
-            view_df = augmented[columns_to_keep].copy()
-            metric_label = view_cfg.get("metric_label")
-            if metric_label and metric_label != metric_column:
-                view_df = view_df.rename(columns={metric_column: metric_label})
-            percentile_view_tables[view_cfg["name"]] = view_df
-            percentile_sheet_names[view_cfg["name"]] = view_cfg.get(
-                "sheet_name", view_cfg["name"]
+                "scenario_assignment, scenario_detail, scenario_summary, "
+                "scenario_percentile, raw."
             )
 
         if not spod_variants_config:
@@ -1439,8 +1534,8 @@ def process_project(project_root: Path) -> None:
         spod_sheet_names: Dict[str, str] = {}
 
         for spod_cfg in spod_variants_config:
-            source_type = spod_cfg.get("source_type", "manager_view")
-            source_name = spod_cfg["source_name"]
+            source_type = spod_cfg.get("source_type", "scenario_summary")
+            source_name = spod_cfg.get("source_name")
             source_table = resolve_table(source_type, source_name)
             value_column = spod_cfg.get("value_column", "Прирост")
             dataset = build_spod_dataset(
@@ -1498,62 +1593,14 @@ def process_project(project_root: Path) -> None:
                 format_excel_sheet(writer, sheet_name, table)
                 written_sheets.add(sheet_name)
 
-            for sheet_name, table in variant_tables.items():
-                if not should_write(sheet_name, variant_sheet_whitelist, "variant_sheets"):
-                    continue
-                printable = rename_output_columns(table, alias_to_source)
-                write_sheet(sheet_name, printable)
+            if should_write(detail_sheet_name, detail_sheet_whitelist, "detail_sheets"):
+                write_sheet(detail_sheet_name, detail_table)
 
-            for sheet_name, summary_table in manager_view_tables.items():
-                if not should_write(sheet_name, manager_view_whitelist, "manager_view_sheets"):
-                    continue
-                display_table = summary_table.rename(
-                    columns={
-                        SELECTED_MANAGER_ID_COL: "Таб. номер ВКО (выбранный)",
-                        SELECTED_MANAGER_NAME_COL: "ВКО (выбранный)",
-                    }
-                )
-                write_sheet(sheet_name, display_table)
+            if should_write(summary_sheet_name, summary_sheet_whitelist, "summary_sheets"):
+                write_sheet(summary_sheet_name, summary_table)
 
-            for sheet_name, summary_table in direct_manager_tables.items():
-                if not should_write(sheet_name, direct_manager_whitelist, "direct_manager_sheets"):
-                    continue
-                display_table = summary_table.rename(
-                    columns={
-                        DIRECT_MANAGER_ID_COL: "Таб. номер ВКО (по файлу)",
-                        DIRECT_MANAGER_NAME_COL: "ВКО (по файлу)",
-                    }
-                )
-                write_sheet(sheet_name, display_table)
-
-            for sheet_name, combo_table in growth_combination_tables.items():
-                if not should_write(
-                    sheet_name, growth_combination_whitelist, "growth_combination_sheets"
-                ):
-                    continue
-                write_sheet(sheet_name, combo_table)
-
-            variant_names = {
-                1: "V1_ВКО_безТБ_КМ_пофайлу",
-                2: "V2_ВКО_сТБ_КМ_пофайлу",
-                3: "V3_ВКО_безТБ_КМ_последний",
-                4: "V4_ВКО_сТБ_КМ_последний",
-                5: "V5_ИНН_безТБ_КМ_пофайлу",
-                6: "V6_ИНН_сТБ_КМ_пофайлу",
-                7: "V7_ИНН_безТБ_КМ_последний",
-                8: "V8_ИНН_сТБ_КМ_последний",
-            }
-            for variant_num, variant_df in variant_matrix_tables.items():
-                sheet_name = variant_names.get(variant_num, f"VARIANT_{variant_num}")
-                if not should_write(sheet_name, variant_matrix_whitelist, "variant_matrix_sheets"):
-                    continue
-                write_sheet(sheet_name, variant_df)
-
-            for view_name, view_table in percentile_view_tables.items():
-                sheet_name = percentile_sheet_names.get(view_name, view_name)
-                if not should_write(sheet_name, percentile_whitelist, "percentile_sheets"):
-                    continue
-                write_sheet(sheet_name, view_table)
+            if should_write(percentile_sheet_name, percentile_sheet_whitelist, "percentile_sheets"):
+                write_sheet(percentile_sheet_name, percentile_table)
 
             for calc_meta in calc_sheets_to_write:
                 owner_name = calc_meta["owner"]
@@ -1570,11 +1617,7 @@ def process_project(project_root: Path) -> None:
                 sheet_name = spod_sheet_names.get(spod_name, spod_name)
                 write_sheet(sheet_name, dataset)
 
-            raw_sheets = [
-                ("RAW_T0", format_raw_sheet(current_df, alias_to_source)),
-                ("RAW_T1", format_raw_sheet(previous_df, alias_to_source)),
-            ]
-            for sheet_name, raw_table in raw_sheets:
+            for sheet_name, raw_table in raw_tables.items():
                 if not should_write(sheet_name, raw_sheet_whitelist, "raw_sheets"):
                     continue
                 write_sheet(sheet_name, raw_table)
