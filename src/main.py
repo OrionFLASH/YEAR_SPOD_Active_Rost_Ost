@@ -41,21 +41,86 @@ def build_settings_tree() -> SettingsTree:
             # items: для каждого XLSX указываем ключ (не менять без причины), ярлык периода и имя файла в каталоге IN.
             #  - Хотите обрабатывать другие файлы? Меняйте file_name или добавляйте новые записи по аналогии.
             #  - Нужно читать несколько листов? Задайте "sheet": "Имя листа" у соответствующего item.
+            #  - Если file_name для T-2 пустое, используется логика с 2 файлами, иначе с 3 файлами.
+            #  - columns и filters можно задать для каждого файла отдельно, иначе используются общие значения.
             "items": [
                 {
                     "key": "current",          # фиксированный ключ T-0; лучше не переименовывать.
                     "label": "T-0",            # подпись, которая пойдёт в логи.
-                    "file_name": "M-10_DIF_20251125_1100.xlsx",
+                    "file_name": "2025_M-10_DIF.xlsx",
                     "sheet": "Sheet1",
+                    # Колонки для этого файла (если не указаны, используются общие из "columns" ниже)
+                    "columns": [
+                        {"alias": "tb", "source": "Короткое ТБ"},
+                        {"alias": "gosb", "source": "Полное ГОСБ"},
+                        {"alias": "manager_name", "source": "ФИО"},
+                        {"alias": "manager_id", "source": "Табельный номер"},
+                        {"alias": "client_id", "source": "ИНН"},
+                        {"alias": "fact_value", "source": "Факт"},
+                    ],
+                    # Фильтры для этого файла (если не указаны, используются общие из "filters" ниже)
+                    "filters": {
+                        "drop_rules": [
+                            {"alias": "manager_name", "values": ["-", "Серая зона"]},
+                            {"alias": "manager_id", "values": ["-", "Green_Zone", "Tech_Sib"]},
+                            {"alias": "client_id", "values": ["Report_id не определен", "0", "000000000000"]},
+                            {"alias": "tb", "values": ["ЦА"]},
+                            {"alias": "gosb", "values": ["9999"]},
+                        ],
+                    },
                 },
                 {
                     "key": "previous",         # фиксированный ключ T-1.
                     "label": "T-1",
-                    "file_name": "M-9_DIF_20251125_1059.xlsx",
+                    "file_name": "2025_M-9_DIF.xlsx",
                     "sheet": "Sheet1",
+                    # Колонки для этого файла (если не указаны, используются общие из "columns" ниже)
+                    "columns": [
+                        {"alias": "tb", "source": "Короткое ТБ"},
+                        {"alias": "gosb", "source": "Полное ГОСБ"},
+                        {"alias": "manager_name", "source": "ФИО"},
+                        {"alias": "manager_id", "source": "Табельный номер"},
+                        {"alias": "client_id", "source": "ИНН"},
+                        {"alias": "fact_value", "source": "Факт"},
+                    ],
+                    # Фильтры для этого файла (если не указаны, используются общие из "filters" ниже)
+                    "filters": {
+                        "drop_rules": [
+                            {"alias": "manager_name", "values": ["-", "Серая зона"]},
+                            {"alias": "manager_id", "values": ["-", "Green_Zone", "Tech_Sib"]},
+                            {"alias": "client_id", "values": ["Report_id не определен", "0", "000000000000"]},
+                            {"alias": "tb", "values": ["ЦА"]},
+                            {"alias": "gosb", "values": ["9999"]},
+                        ],
+                    },
+                },
+                {
+                    "key": "previous2",        # фиксированный ключ T-2.
+                    "label": "T-2",
+                    "file_name": "2025_M-8_DIF.xlsx",  # Если пустое "", используется логика с 2 файлами
+                    "sheet": "Sheet1",
+                    # Колонки для этого файла (если не указаны, используются общие из "columns" ниже)
+                    "columns": [
+                        {"alias": "tb", "source": "Короткое ТБ"},
+                        {"alias": "gosb", "source": "Полное ГОСБ"},
+                        {"alias": "manager_name", "source": "ФИО"},
+                        {"alias": "manager_id", "source": "Табельный номер"},
+                        {"alias": "client_id", "source": "ИНН"},
+                        {"alias": "fact_value", "source": "Факт"},
+                    ],
+                    # Фильтры для этого файла (если не указаны, используются общие из "filters" ниже)
+                    "filters": {
+                        "drop_rules": [
+                            {"alias": "manager_name", "values": ["-", "Серая зона"]},
+                            {"alias": "manager_id", "values": ["-", "Green_Zone", "Tech_Sib"]},
+                            {"alias": "client_id", "values": ["Report_id не определен", "0", "000000000000"]},
+                            {"alias": "tb", "values": ["ЦА"]},
+                            {"alias": "gosb", "values": ["9999"]},
+                        ],
+                    },
                 },
             ],
-            # columns: связываем внутренние alias и исходные названия колонок.
+            # columns: общие колонки по умолчанию (используются, если не указаны в items)
             #  - Чтобы подставить другое поле из Excel, достаточно изменить "source".
             #  - Чтобы добавить ещё колонку, расширьте список и пропишите alias (английское имя) + source (русский заголовок).
             "columns": [
@@ -68,7 +133,7 @@ def build_settings_tree() -> SettingsTree:
             ],
         },
         "filters": {
-            # drop_rules: список словарей {alias, values}, где values — любые запрещённые строки.
+            # drop_rules: общие правила фильтрации по умолчанию (используются, если не указаны в items)
             #  - Можно дополнять массив values новыми маркерами (например, ["-", "N/A", "Удалить"]).
             #  - alias должен совпадать с alias из блока columns.
             "drop_rules": [
@@ -92,66 +157,43 @@ def build_settings_tree() -> SettingsTree:
             "client_id": {"fill_char": "0", "total_length": 12},
         },
         "spod": {
-            # Глобальные параметры имени файлов/логов. Остальные настройки задаются
-            # в разделе spod_variants индивидуально для каждого варианта.
+            # Глобальные параметры имени файлов/логов.
             "file_prefix": "YEAR_SPOD_Active_Rost_ost",
             "log_topic": "spod",
         },
-        "scenario": {
-            # name используется в логах/именах листов.
-            "name": "SCENARIO_MAIN",
-            # key_mode: client (агрегация по ИНН) или manager (агрегация по табельному номеру).
-            "key_mode": "client",
-            # include_tb: True → добавляем ТБ в ключ и считаем показатели в разрезе ТерБанков.
-            "include_tb": False,
-            # manager_assignment: latest (последний доступный КМ) или per_file (T0 и T1 отдельно).
-            "manager_assignment": "latest",
-            # Имена листов в Excel (можно переопределить).
-            "detail_sheet_name": "DETAIL_SCENARIO",
-            "summary_sheet_name": "SUMMARY_TN",
-            "percentile_sheet_name": "PERCENTILE_TN",
+        "variants": {
+            # Три варианта расчета прироста:
+            # 1. По КМ (manager_id), без учета ТБ - суммируем в каждом файле по КМ, затем разница
+            # 2. По ИНН (client_id), КМ определяется на конец (T-0 → T-1 → T-2), без ТБ
+            # 3. По ИНН (client_id), КМ определяется на конец (T-0 → T-1 → T-2), с учетом ТБ
+            "variant_1": {
+                "name": "V1_КМ_безТБ",
+                "key_mode": "manager",  # Агрегация по manager_id
+                "include_tb": False,
+                "summary_sheet_name": "SUMMARY_V1",
+                "percentile_sheet_name": "PERCENTILE_V1",
+            },
+            "variant_2": {
+                "name": "V2_ИНН_безТБ",
+                "key_mode": "client",  # Агрегация по client_id
+                "include_tb": False,
+                "summary_sheet_name": "SUMMARY_V2",
+                "percentile_sheet_name": "PERCENTILE_V2",
+            },
+            "variant_3": {
+                "name": "V3_ИНН_сТБ",
+                "key_mode": "client",  # Агрегация по client_id
+                "include_tb": True,  # С учетом ТБ
+                "summary_sheet_name": "SUMMARY_V3",
+                "percentile_sheet_name": "PERCENTILE_V3",
+            },
         },
-        "spod_variants": [
-            {
-                "name": "SPOD_SCENARIO",
-                "source_type": "scenario_summary",
-                "calc_sheet_name": "CALC_SCENARIO",
-                "spod_sheet_name": "SPOD_SCENARIO",
-                "value_column": "Прирост",
-                "fact_value_filter": ">0",
-                "plan_value": 0.0,
-                "priority": "1",
-                "contest_code": "01_2025-2_14-1_2",
-                "tournament_code": "t_01_2025-2_14-1_2_1001",
-                "contest_date": "31/10/2025",
-                "include_in_csv": True,
-            },
-            {
-                "name": "SPOD_SCENARIO_PERCENTILE",
-                "source_type": "scenario_percentile",
-                "calc_sheet_name": "CALC_SCENARIO_PERC",
-                "spod_sheet_name": "SPOD_SCENARIO_PERC",
-                "value_column": "Обогнал_всего_%",
-                "fact_value_filter": ">=0",
-                "plan_value": 0.0,
-                "priority": "1",
-                "contest_code": "01_2025-2_14-1_2",
-                "tournament_code": "t_01_2025-2_14-1_2_1001",
-                "contest_date": "31/10/2025",
-                "include_in_csv": True,
-            },
-        ],
         "report_layout": {
             # Управляет тем, какие листы попадают в основной Excel (пустой список = блок отключён).
-            # Отсутствие ключа означает сохранение предыдущего поведения и выгрузку всех листов блока.
-            # detail/summary/percentile — новые категории отчётов сценария.
-            "detail_sheets": ["DETAIL_SCENARIO"],
-            "summary_sheets": ["SUMMARY_TN"],
-            "percentile_sheets": ["PERCENTILE_TN"],
-            "calc_sheets": ["CALC_SCENARIO", "CALC_SCENARIO_PERC"],
-            "spod_variants": ["SPOD_SCENARIO", "SPOD_SCENARIO_PERCENTILE"],
-            # raw_sheets — очищенные исходники T-0/T-1.
-            "raw_sheets": ["RAW_T0", "RAW_T1"],
+            "summary_sheets": ["SUMMARY_V1", "SUMMARY_V2", "SUMMARY_V3"],
+            "percentile_sheets": ["PERCENTILE_V1", "PERCENTILE_V2", "PERCENTILE_V3"],
+            # raw_sheets — очищенные исходники T-0/T-1/T-2.
+            "raw_sheets": ["RAW_T0", "RAW_T1", "RAW_T2"],
         },
     }
 
@@ -186,6 +228,24 @@ def resolve_sheet_name(file_section: Dict[str, Any], file_key: str) -> str:
 
     meta = get_file_meta(file_section, file_key)
     return meta.get("sheet") or file_section.get("sheet", "Sheet1")
+
+
+def get_file_columns(file_section: Dict[str, Any], file_key: str) -> List[Dict[str, str]]:
+    """Возвращает колонки для конкретного файла (или общие, если не указаны)."""
+
+    meta = get_file_meta(file_section, file_key)
+    if "columns" in meta:
+        return meta["columns"]
+    return file_section.get("columns", [])
+
+
+def get_file_filters(file_section: Dict[str, Any], file_key: str) -> Dict[str, Any]:
+    """Возвращает фильтры для конкретного файла (или общие, если не указаны)."""
+
+    meta = get_file_meta(file_section, file_key)
+    if "filters" in meta:
+        return meta["filters"]
+    return file_section.get("filters", {"drop_rules": []})
 
 
 def parse_contest_date(contest_date: str) -> str:
@@ -316,115 +376,20 @@ def append_percentile_columns(
     value_column: str,
     tb_column: Optional[str] = None,
 ) -> pd.DataFrame:
-    """Добавляет в таблицу колонки процентных рангов и абсолютных значений (см. Docs/percentile_logic.md)."""
-
-    if value_column not in table.columns:
-        raise KeyError(
-            f"Колонка '{value_column}' не найдена в таблице для расчёта процентилей."
-        )
-
-    prepared = table.copy()
-    values = pd.to_numeric(prepared[value_column], errors="coerce").fillna(0.0)
-
-    obognal_all, obognali_all, count_less_all, count_greater_all, count_equal_all, total_all = _compute_percentile_pair(values)
-    prepared["Обогнал_всего_%"] = obognal_all
-    prepared["Обогнали_меня_всего_%"] = obognali_all
-    prepared["Обогнал_всего_кол"] = count_less_all
-    prepared["Обогнали_меня_всего_кол"] = count_greater_all
-    prepared["Равных_всего_кол"] = count_equal_all
-    prepared["Всего_КМ_всего"] = total_all
-
-    mask_non_negative = values >= 0
-    if mask_non_negative.any():
-        obognal_ge0, obognali_ge0, count_less_ge0, count_greater_ge0, count_equal_ge0, total_ge0 = _compute_percentile_pair(values[mask_non_negative])
-        prepared["Обогнал_всего_≥0_%"] = obognal_ge0.reindex(
-            prepared.index, fill_value=0.0
-        )
-        prepared["Обогнали_меня_всего_≥0_%"] = obognali_ge0.reindex(
-            prepared.index, fill_value=0.0
-        )
-        prepared["Обогнал_всего_≥0_кол"] = count_less_ge0.reindex(
-            prepared.index, fill_value=0.0
-        )
-        prepared["Обогнали_меня_всего_≥0_кол"] = count_greater_ge0.reindex(
-            prepared.index, fill_value=0.0
-        )
-        prepared["Равных_всего_≥0_кол"] = count_equal_ge0.reindex(
-            prepared.index, fill_value=0.0
-        )
-        prepared["Всего_КМ_всего_≥0"] = total_ge0.reindex(
-            prepared.index, fill_value=0.0
-        )
-    else:
-        prepared["Обогнал_всего_≥0_%"] = 0.0
-        prepared["Обогнали_меня_всего_≥0_%"] = 0.0
-        prepared["Обогнал_всего_≥0_кол"] = 0.0
-        prepared["Обогнали_меня_всего_≥0_кол"] = 0.0
-        prepared["Равных_всего_≥0_кол"] = 0.0
-        prepared["Всего_КМ_всего_≥0"] = 0.0
-
-    tb_column_present = tb_column and tb_column in prepared.columns
-    tb_columns = [
-        "Обогнал_ТерБанк_%",
-        "Обогнали_меня_ТерБанк_%",
-        "Обогнал_ТерБанк_≥0_%",
-        "Обогнали_меня_ТерБанк_≥0_%",
-    ]
-    tb_count_columns = [
-        "Обогнал_ТерБанк_кол",
-        "Обогнали_меня_ТерБанк_кол",
-        "Равных_ТерБанк_кол",
-        "Всего_КМ_ТерБанк",
-        "Обогнал_ТерБанк_≥0_кол",
-        "Обогнали_меня_ТерБанк_≥0_кол",
-        "Равных_ТерБанк_≥0_кол",
-        "Всего_КМ_ТерБанк_≥0",
-    ]
-    if tb_column_present:
-        for column in tb_columns + tb_count_columns:
-            prepared[column] = 0.0
-
-        for _, group in prepared.groupby(tb_column):
-            subset_values = values.loc[group.index]
-            obognal_tb, obognali_tb, count_less_tb, count_greater_tb, count_equal_tb, total_tb = _compute_percentile_pair(subset_values)
-            prepared.loc[group.index, "Обогнал_ТерБанк_%"] = obognal_tb
-            prepared.loc[group.index, "Обогнали_меня_ТерБанк_%"] = obognali_tb
-            prepared.loc[group.index, "Обогнал_ТерБанк_кол"] = count_less_tb
-            prepared.loc[group.index, "Обогнали_меня_ТерБанк_кол"] = count_greater_tb
-            prepared.loc[group.index, "Равных_ТерБанк_кол"] = count_equal_tb
-            prepared.loc[group.index, "Всего_КМ_ТерБанк"] = total_tb
-
-            tb_mask = subset_values >= 0
-            if tb_mask.any():
-                obognal_tb_ge0, obognali_tb_ge0, count_less_tb_ge0, count_greater_tb_ge0, count_equal_tb_ge0, total_tb_ge0 = _compute_percentile_pair(
-                    subset_values[tb_mask]
-                )
-                idx = subset_values[tb_mask].index
-                prepared.loc[idx, "Обогнал_ТерБанк_≥0_%"] = obognal_tb_ge0
-                prepared.loc[idx, "Обогнали_меня_ТерБанк_≥0_%"] = obognali_tb_ge0
-                prepared.loc[idx, "Обогнал_ТерБанк_≥0_кол"] = count_less_tb_ge0
-                prepared.loc[idx, "Обогнали_меня_ТерБанк_≥0_кол"] = count_greater_tb_ge0
-                prepared.loc[idx, "Равных_ТерБанк_≥0_кол"] = count_equal_tb_ge0
-                prepared.loc[idx, "Всего_КМ_ТерБанк_≥0"] = total_tb_ge0
-    else:
-        for column in tb_columns + tb_count_columns:
-            prepared[column] = 0.0
-
-    percent_columns = [
-        "Обогнал_всего_%",
-        "Обогнали_меня_всего_%",
-        "Обогнал_всего_≥0_%",
-        "Обогнали_меня_всего_≥0_%",
-        "Обогнал_ТерБанк_%",
-        "Обогнали_меня_ТерБанк_%",
-        "Обогнал_ТерБанк_≥0_%",
-        "Обогнали_меня_ТерБанк_≥0_%",
-    ]
-    for column in percent_columns:
-        if column in prepared.columns:
-            prepared[column] = prepared[column].round(2)
-
-    return prepared
+    """Добавляет в таблицу колонки процентных рангов и абсолютных значений.
+    
+    Функция-обертка для PercentileCalculator.append_percentile_columns.
+    Сохранена для обратной совместимости.
+    
+    Args:
+        table: DataFrame с данными для расчета процентилей
+        value_column: Имя колонки со значениями для расчета
+        tb_column: Имя колонки с ТБ для группировки (может быть None)
+    
+    Returns:
+        DataFrame с добавленными колонками процентилей
+    """
+    return PercentileCalculator.append_percentile_columns(table, value_column=value_column, tb_column=tb_column)
 
 
 def build_scenario_keys(key_mode: str, include_tb: bool) -> List[str]:
@@ -674,6 +639,1033 @@ def normalize_string(value: Any) -> str:
     return str(value).strip()
 
 
+# ==================== КЛАССЫ ООП ====================
+
+class DataLoader:
+    """Класс для загрузки и очистки данных из Excel файлов.
+    
+    Инкапсулирует логику чтения файлов, переименования колонок, форматирования
+    идентификаторов и фильтрации запрещенных значений.
+    
+    Атрибуты:
+        identifiers: Настройки форматирования идентификаторов (manager_id, client_id)
+        logger: Логгер для записи сообщений
+    """
+    
+    def __init__(self, identifiers: Mapping[str, Mapping[str, Any]], logger: Mapping[str, Any]):
+        """Инициализирует загрузчик данных.
+        
+        Args:
+            identifiers: Словарь с настройками форматирования идентификаторов
+            logger: Логгер с методами info и debug
+        """
+        self.identifiers = identifiers
+        self.logger = logger
+    
+    def read_source_file(
+        self,
+        file_path: Path,
+        sheet_name: str,
+        columns: List[Dict[str, str]],
+        drop_rules: Mapping[str, Iterable[str]],
+    ) -> pd.DataFrame:
+        """Загружает исходный Excel и подготавливает данные.
+        
+        Выполняет следующие операции:
+        1. Читает указанный лист Excel
+        2. Переименовывает колонки согласно маппингу
+        3. Нормализует строковые поля
+        4. Форматирует идентификаторы (табельные номера и ИНН)
+        5. Преобразует факт в числовой формат
+        6. Удаляет строки с запрещенными значениями
+        
+        Args:
+            file_path: Путь к файлу Excel
+            sheet_name: Имя листа для чтения
+            columns: Список словарей с alias и source для колонок
+            drop_rules: Правила фильтрации строк (словарь {alias: tuple(values)})
+        
+        Returns:
+            DataFrame с очищенными и отформатированными данными
+        
+        Raises:
+            FileNotFoundError: Если файл не существует
+            ValueError: Если отсутствуют обязательные колонки
+        """
+        if not file_path.exists():
+            raise FileNotFoundError(f"Файл не найден: {file_path}")
+
+        log_info(self.logger, f"Загружаю данные из файла {file_path.name}")
+        
+        # Формируем маппинг колонок из списка
+        column_maps = {column["source"]: column["alias"] for column in columns}
+        
+        # Читаем один лист Excel и сразу переименовываем колонки в единый формат
+        raw_df = pd.read_excel(file_path, sheet_name=sheet_name)
+        renamed = raw_df.rename(columns=column_maps)
+
+        required_columns = list(column_maps.values())
+        missing = [col for col in required_columns if col not in renamed.columns]
+        if missing:
+            raise ValueError(
+                f"Отсутствуют обязательные колонки {missing} в файле {file_path}"
+            )
+
+        prepared = renamed[required_columns].copy()
+
+        # Строковые столбцы очищаем от пробелов и None
+        for column in ("tb", "gosb", "manager_name"):
+            prepared[column] = prepared[column].apply(normalize_string)
+
+        manager_identifier = self.identifiers["manager_id"]
+        client_identifier = self.identifiers["client_id"]
+
+        # Форматируем табельные номера и ИНН в заранее заданную длину
+        prepared["manager_id"] = prepared["manager_id"].apply(
+            lambda value: format_identifier(
+                value=value,
+                total_length=manager_identifier["total_length"],
+                fill_char=manager_identifier["fill_char"],
+            )
+        )
+        prepared["client_id"] = prepared["client_id"].apply(
+            lambda value: format_identifier(
+                value=value,
+                total_length=client_identifier["total_length"],
+                fill_char=client_identifier["fill_char"],
+            )
+        )
+
+        prepared["fact_value_clean"] = prepared["fact_value"].apply(safe_to_float)
+
+        cleaned = self.drop_forbidden_rows(prepared, drop_rules)
+        log_debug(
+            self.logger,
+            f"После очистки в {file_path.name} осталось строк: {len(cleaned)}",
+            class_name="DataLoader",
+            func_name="read_source_file",
+        )
+        return cleaned
+    
+    def drop_forbidden_rows(
+        self,
+        df: pd.DataFrame,
+        drop_rules: Mapping[str, Iterable[str]],
+    ) -> pd.DataFrame:
+        """Удаляет строки с запрещёнными значениями.
+        
+        Проходит по каждой колонке из drop_rules и удаляет строки, где значение
+        (приведенное к нижнему регистру) совпадает с одним из запрещенных.
+        
+        Args:
+            df: DataFrame для очистки
+            drop_rules: Словарь {column_alias: tuple(forbidden_values)}
+        
+        Returns:
+            DataFrame без запрещенных строк
+        """
+        cleaned = df.copy()
+        for column, values in drop_rules.items():
+            forbidden = {value.lower() for value in values}
+
+            def is_forbidden(value: Any) -> bool:
+                if value is None:
+                    return False
+                return str(value).strip().lower() in forbidden
+
+            before = len(cleaned)
+            cleaned = cleaned[~cleaned[column].apply(is_forbidden)]
+            log_debug(
+                self.logger,
+                f"Колонка {column}: удалено {before - len(cleaned)} строк",
+                class_name="DataLoader",
+                func_name="drop_forbidden_rows",
+            )
+        return cleaned
+
+
+class Aggregator:
+    """Класс для агрегации данных и определения менеджеров.
+    
+    Инкапсулирует логику группировки данных, суммирования фактов,
+    определения доминантных менеджеров и построения наборов данных для вариантов.
+    
+    Атрибуты:
+        defaults: Настройки по умолчанию (manager_name, manager_id)
+        identifiers: Настройки форматирования идентификаторов
+        logger: Логгер для записи сообщений
+    """
+    
+    def __init__(
+        self,
+        defaults: Mapping[str, Any],
+        identifiers: Mapping[str, Any],
+        logger: Mapping[str, Any],
+    ):
+        """Инициализирует агрегатор.
+        
+        Args:
+            defaults: Словарь с настройками по умолчанию
+            identifiers: Словарь с настройками форматирования идентификаторов
+            logger: Логгер с методами info и debug
+        """
+        self.defaults = defaults
+        self.identifiers = identifiers
+        self.logger = logger
+    
+    def aggregate_facts(
+        self,
+        df: pd.DataFrame,
+        key_columns: List[str],
+        suffix: str,
+        variant_name: str,
+    ) -> pd.DataFrame:
+        """Группирует данные по ключу и суммирует факт.
+        
+        Группирует DataFrame по указанным ключевым колонкам и суммирует
+        значения fact_value_clean. Результат переименовывается в Факт_{suffix}.
+        
+        Args:
+            df: Исходный DataFrame с данными
+            key_columns: Список колонок для группировки
+            suffix: Суффикс для имени результирующей колонки (например, "T0", "T1")
+            variant_name: Имя варианта для логирования
+        
+        Returns:
+            DataFrame с колонками key_columns и Факт_{suffix}
+        """
+        grouped = (
+            df[key_columns + ["fact_value_clean"]]
+            .fillna({"fact_value_clean": 0.0})
+            .groupby(key_columns, dropna=False, as_index=False)
+            .sum(numeric_only=True)
+        )
+        renamed = grouped.rename(columns={"fact_value_clean": f"Факт_{suffix}"})
+        log_debug(
+            self.logger,
+            f"{variant_name}: агрегировано {len(renamed)} строк для суффикса {suffix}",
+            class_name="Aggregator",
+            func_name="aggregate_facts",
+        )
+        return renamed
+    
+    def select_best_manager(
+        self,
+        df: pd.DataFrame,
+        key_columns: List[str],
+        variant_name: str,
+    ) -> pd.DataFrame:
+        """Определяет доминантного менеджера (по сумме факта) для каждого ключа.
+        
+        Алгоритм:
+        1. Группирует данные по (ключ, manager_id, manager_name) и суммирует fact_value_clean
+        2. Для каждого ключа выбирает менеджера с максимальной суммой
+        3. Если суммы равны, pandas idxmax вернёт первую попавшуюся
+        
+        Args:
+            df: Исходный DataFrame с данными
+            key_columns: Список колонок для ключа (например, ["client_id"] или ["client_id", "tb"])
+            variant_name: Имя варианта для логирования
+        
+        Returns:
+            DataFrame с колонками key_columns, "ВКО", "Таб. номер ВКО"
+        """
+        additional_columns = [
+            column for column in ("manager_name", "manager_id") if column not in key_columns
+        ]
+        grouping_columns = key_columns + additional_columns
+        grouped = (
+            df[grouping_columns + ["fact_value_clean"]]
+            .fillna({"fact_value_clean": 0.0})
+            .groupby(grouping_columns, dropna=False, as_index=False)
+            .sum(numeric_only=True)
+        )
+        idx = grouped.groupby(key_columns, dropna=False)["fact_value_clean"].idxmax()
+        best = grouped.loc[idx, key_columns + additional_columns].copy()
+        result = best.copy()
+        if "manager_name" in result.columns and "manager_name" not in key_columns:
+            result = result.rename(columns={"manager_name": "ВКО"})
+        if "manager_id" in key_columns and "manager_id" in result.columns:
+            result["Таб. номер ВКО"] = result["manager_id"]
+        elif "manager_id" in result.columns:
+            result = result.rename(columns={"manager_id": "Таб. номер ВКО"})
+        log_debug(
+            self.logger,
+            f"{variant_name}: выбраны менеджеры для {len(result)} ключей",
+            class_name="Aggregator",
+            func_name="select_best_manager",
+        )
+        return result
+    
+    def build_latest_manager(
+        self,
+        current_best: pd.DataFrame,
+        previous_best: pd.DataFrame,
+        key_columns: List[str],
+        variant_name: str,
+    ) -> pd.DataFrame:
+        """Комбинирует менеджеров, отдавая приоритет файлу T-0.
+        
+        Объединяет менеджеров из T-0 и T-1, приоритет отдается T-0.
+        Если менеджер не найден, используется значение по умолчанию.
+        
+        Args:
+            current_best: DataFrame с менеджерами из T-0 (колонки: key_columns, "ВКО", "Таб. номер ВКО")
+            previous_best: DataFrame с менеджерами из T-1 (колонки: key_columns, "ВКО", "Таб. номер ВКО")
+            key_columns: Список колонок для ключа
+            variant_name: Имя варианта для логирования
+        
+        Returns:
+            DataFrame с колонками key_columns, "ВКО_Актуальный", "Таб. номер ВКО_Актуальный"
+        """
+        default_name = self.defaults["manager_name"]
+        identifier_settings = self.identifiers["manager_id"]
+        default_id = format_identifier(
+            self.defaults["manager_id"],
+            total_length=identifier_settings["total_length"],
+            fill_char=identifier_settings["fill_char"],
+        )
+
+        curr = (
+            current_best.set_index(key_columns)
+            if not current_best.empty
+            else pd.DataFrame(columns=key_columns + ["ВКО", "Таб. номер ВКО"]).set_index(key_columns)
+        )
+        prev = (
+            previous_best.set_index(key_columns)
+            if not previous_best.empty
+            else pd.DataFrame(columns=key_columns + ["ВКО", "Таб. номер ВКО"]).set_index(key_columns)
+        )
+
+        combined = prev.join(
+            curr,
+            how="outer",
+            lsuffix="_prev",
+            rsuffix="_curr",
+        )
+        # Проверяем наличие колонок перед обращением
+        vko_curr = combined.get("ВКО_curr", pd.Series(index=combined.index, dtype=object))
+        vko_prev = combined.get("ВКО_prev", pd.Series(index=combined.index, dtype=object))
+        combined["ВКО_Актуальный"] = vko_curr.combine_first(vko_prev).fillna(default_name)
+        
+        tab_curr = combined.get("Таб. номер ВКО_curr", pd.Series(index=combined.index, dtype=object))
+        tab_prev = combined.get("Таб. номер ВКО_prev", pd.Series(index=combined.index, dtype=object))
+        combined["Таб. номер ВКО_Актуальный"] = tab_curr.combine_first(tab_prev).fillna(default_id)
+
+        result = combined.reset_index()[key_columns + ["ВКО_Актуальный", "Таб. номер ВКО_Актуальный"]]
+        log_debug(
+            self.logger,
+            f"{variant_name}: определены актуальные менеджеры для {len(result)} ключей",
+            class_name="Aggregator",
+            func_name="build_latest_manager",
+        )
+        return result
+    
+    def build_latest_manager_with_t2(
+        self,
+        current_best: pd.DataFrame,
+        previous_best: pd.DataFrame,
+        previous2_best: Optional[pd.DataFrame],
+        key_columns: List[str],
+        variant_name: str,
+    ) -> pd.DataFrame:
+        """Комбинирует менеджеров, отдавая приоритет файлу T-0, затем T-1, затем T-2.
+        
+        Объединяет менеджеров из всех трех периодов, приоритет: T-0 → T-1 → T-2.
+        Если менеджер не найден, используется значение по умолчанию.
+        
+        Args:
+            current_best: DataFrame с менеджерами из T-0
+            previous_best: DataFrame с менеджерами из T-1
+            previous2_best: DataFrame с менеджерами из T-2 (может быть None)
+            key_columns: Список колонок для ключа
+            variant_name: Имя варианта для логирования
+        
+        Returns:
+            DataFrame с колонками key_columns, "ВКО_Актуальный", "Таб. номер ВКО_Актуальный"
+        """
+        default_name = self.defaults["manager_name"]
+        identifier_settings = self.identifiers["manager_id"]
+        default_id = format_identifier(
+            self.defaults["manager_id"],
+            total_length=identifier_settings["total_length"],
+            fill_char=identifier_settings["fill_char"],
+        )
+
+        curr = (
+            current_best.set_index(key_columns)
+            if not current_best.empty
+            else pd.DataFrame(columns=key_columns + ["ВКО", "Таб. номер ВКО"]).set_index(key_columns)
+        )
+        prev = (
+            previous_best.set_index(key_columns)
+            if not previous_best.empty
+            else pd.DataFrame(columns=key_columns + ["ВКО", "Таб. номер ВКО"]).set_index(key_columns)
+        )
+        prev2 = (
+            previous2_best.set_index(key_columns)
+            if previous2_best is not None and not previous2_best.empty
+            else pd.DataFrame(columns=key_columns + ["ВКО", "Таб. номер ВКО"]).set_index(key_columns)
+        )
+
+        # Объединяем: сначала prev2, затем prev, затем curr (приоритет curr)
+        combined = prev2.join(prev, how="outer", lsuffix="_prev2", rsuffix="_prev")
+        combined = combined.join(curr, how="outer", rsuffix="_curr")
+        
+        # Определяем актуального менеджера: приоритет curr → prev → prev2
+        # Проверяем наличие колонок перед обращением
+        vko_curr = combined.get("ВКО_curr", pd.Series(index=combined.index, dtype=object))
+        vko_prev = combined.get("ВКО_prev", pd.Series(index=combined.index, dtype=object))
+        vko_prev2 = combined.get("ВКО_prev2", pd.Series(index=combined.index, dtype=object))
+        combined["ВКО_Актуальный"] = (
+            vko_curr
+            .combine_first(vko_prev)
+            .combine_first(vko_prev2)
+            .fillna(default_name)
+        )
+        
+        tab_curr = combined.get("Таб. номер ВКО_curr", pd.Series(index=combined.index, dtype=object))
+        tab_prev = combined.get("Таб. номер ВКО_prev", pd.Series(index=combined.index, dtype=object))
+        tab_prev2 = combined.get("Таб. номер ВКО_prev2", pd.Series(index=combined.index, dtype=object))
+        combined["Таб. номер ВКО_Актуальный"] = (
+            tab_curr
+            .combine_first(tab_prev)
+            .combine_first(tab_prev2)
+            .fillna(default_id)
+        )
+
+        result = combined.reset_index()[key_columns + ["ВКО_Актуальный", "Таб. номер ВКО_Актуальный"]]
+        log_debug(
+            self.logger,
+            f"{variant_name}: определены актуальные менеджеры для {len(result)} ключей (T-0 → T-1 → T-2)",
+            class_name="Aggregator",
+            func_name="build_latest_manager_with_t2",
+        )
+        return result
+    
+    def assemble_variant_dataset_with_t2(
+        self,
+        variant_name: str,
+        key_columns: List[str],
+        current_df: pd.DataFrame,
+        previous_df: pd.DataFrame,
+        previous2_df: Optional[pd.DataFrame],
+    ) -> pd.DataFrame:
+        """Формирует таблицу для конкретного варианта ключа с поддержкой T-2.
+        
+        Выполняет следующие операции:
+        1. Агрегирует факты по ключу для каждого периода (T-0, T-1, T-2)
+        2. Объединяет результаты и рассчитывает прирост:
+           - Если T-2 указан: прирост = (T-0 - T-1) - (T-1 - T-2)
+           - Иначе: прирост = T-0 - T-1
+        3. Определяет лучшего менеджера для каждого периода
+        4. Определяет актуального менеджера (приоритет T-0 → T-1 → T-2)
+        
+        Args:
+            variant_name: Имя варианта для логирования
+            key_columns: Список колонок для ключа агрегации
+            current_df: DataFrame с данными T-0
+            previous_df: DataFrame с данными T-1
+            previous2_df: DataFrame с данными T-2 (может быть None)
+        
+        Returns:
+            DataFrame с колонками key_columns, Факт_T0, Факт_T1, Факт_T2 (если есть),
+            Прирост, ВКО_T0, ВКО_T1, ВКО_T2 (если есть), ВКО_Актуальный, Таб. номер ВКО_Актуальный
+        """
+        log_debug(
+            self.logger,
+            f"{variant_name}: старт построения набора данных (T-2: {'да' if previous2_df is not None else 'нет'})",
+            class_name="Aggregator",
+            func_name="assemble_variant_dataset_with_t2",
+        )
+
+        agg_current = self.aggregate_facts(current_df, key_columns, "T0", variant_name)
+        agg_previous = self.aggregate_facts(previous_df, key_columns, "T1", variant_name)
+        
+        if previous2_df is not None:
+            agg_previous2 = self.aggregate_facts(previous2_df, key_columns, "T2", variant_name)
+            # Объединяем все три периода
+            merged = (
+                pd.merge(agg_current, agg_previous, on=key_columns, how="outer")
+                .merge(agg_previous2, on=key_columns, how="outer")
+                .fillna({"Факт_T0": 0.0, "Факт_T1": 0.0, "Факт_T2": 0.0})
+            )
+            # Формула с T-2: прирост = (T-0 - T-1) - (T-1 - T-2)
+            merged["Прирост"] = (merged["Факт_T0"] - merged["Факт_T1"]) - (merged["Факт_T1"] - merged["Факт_T2"])
+        else:
+            merged = (
+                pd.merge(agg_current, agg_previous, on=key_columns, how="outer")
+                .fillna({"Факт_T0": 0.0, "Факт_T1": 0.0})
+            )
+            merged["Прирост"] = merged["Факт_T0"] - merged["Факт_T1"]
+
+        # Определяем лучшего менеджера для каждого периода
+        best_current = self.select_best_manager(
+            current_df, key_columns, variant_name
+        ).rename(columns={"ВКО": "ВКО_T0", "Таб. номер ВКО": "Таб. номер ВКО_T0"})
+        best_previous = self.select_best_manager(
+            previous_df, key_columns, variant_name
+        ).rename(columns={"ВКО": "ВКО_T1", "Таб. номер ВКО": "Таб. номер ВКО_T1"})
+        
+        merged = merged.merge(best_current, on=key_columns, how="left")
+        merged = merged.merge(best_previous, on=key_columns, how="left")
+        
+        if previous2_df is not None:
+            best_previous2 = self.select_best_manager(
+                previous2_df, key_columns, variant_name
+            ).rename(columns={"ВКО": "ВКО_T2", "Таб. номер ВКО": "Таб. номер ВКО_T2"})
+            merged = merged.merge(best_previous2, on=key_columns, how="left")
+            
+            latest = self.build_latest_manager_with_t2(
+                current_best=best_current.rename(columns={"ВКО_T0": "ВКО", "Таб. номер ВКО_T0": "Таб. номер ВКО"}),
+                previous_best=best_previous.rename(columns={"ВКО_T1": "ВКО", "Таб. номер ВКО_T1": "Таб. номер ВКО"}),
+                previous2_best=best_previous2.rename(columns={"ВКО_T2": "ВКО", "Таб. номер ВКО_T2": "Таб. номер ВКО"}),
+                key_columns=key_columns,
+                variant_name=variant_name,
+            )
+        else:
+            latest = self.build_latest_manager(
+                current_best=best_current.rename(columns={"ВКО_T0": "ВКО", "Таб. номер ВКО_T0": "Таб. номер ВКО"}),
+                previous_best=best_previous.rename(columns={"ВКО_T1": "ВКО", "Таб. номер ВКО_T1": "Таб. номер ВКО"}),
+                key_columns=key_columns,
+                variant_name=variant_name,
+            )
+        
+        merged = merged.merge(latest, on=key_columns, how="left")
+
+        log_debug(
+            self.logger,
+            f"{variant_name}: итоговый набор содержит {len(merged)} строк",
+            class_name="Aggregator",
+            func_name="assemble_variant_dataset_with_t2",
+        )
+        return merged
+    
+    def build_manager_summary(
+        self,
+        variant_df: pd.DataFrame,
+        include_tb: bool,
+        summary_name: str,
+        manager_columns: Mapping[str, str],
+    ) -> pd.DataFrame:
+        """Создаёт свод по уникальным ТН+ВКО (+ТБ опционально).
+        
+        Группирует данные по менеджеру (и ТБ, если include_tb=True) и суммирует
+        факты и прирост.
+        
+        Args:
+            variant_df: DataFrame с данными варианта
+            include_tb: Если True, добавляет ТБ в группировку
+            summary_name: Имя свода для логирования
+            manager_columns: Словарь с именами колонок {"id": "Таб. номер ВКО_...", "name": "ВКО_..."}
+        
+        Returns:
+            DataFrame с колонками: Таб. номер ВКО (выбранный), ВКО (выбранный), ТБ (если include_tb),
+            Факт_T0, Факт_T1, Прирост
+        """
+        manager_id_col = manager_columns["id"]
+        manager_name_col = manager_columns["name"]
+
+        group_columns = [manager_id_col, manager_name_col]
+        tb_column_present = include_tb and "tb" in variant_df.columns
+        if tb_column_present:
+            group_columns.append("tb")
+
+        grouped = (
+            variant_df.groupby(group_columns, dropna=False)[["Факт_T0", "Факт_T1", "Прирост"]]
+            .sum()
+            .reset_index()
+        )
+        rename_map = {
+            manager_id_col: SELECTED_MANAGER_ID_COL,
+            manager_name_col: SELECTED_MANAGER_NAME_COL,
+        }
+        if tb_column_present:
+            rename_map["tb"] = "ТБ"
+        grouped = grouped.rename(columns=rename_map)
+
+        log_debug(
+            self.logger,
+            f"{summary_name}: агрегировано {len(grouped)} строк",
+            class_name="Aggregator",
+            func_name="build_manager_summary",
+        )
+        return grouped
+
+
+class VariantCalculator:
+    """Базовый класс для расчета вариантов прироста.
+    
+    Определяет общий интерфейс для всех вариантов расчета.
+    Каждый вариант должен реализовать метод calculate.
+    
+    Атрибуты:
+        defaults: Настройки по умолчанию
+        identifiers: Настройки форматирования идентификаторов
+        logger: Логгер для записи сообщений
+        aggregator: Экземпляр Aggregator для агрегации данных
+    """
+    
+    def __init__(
+        self,
+        defaults: Mapping[str, Any],
+        identifiers: Mapping[str, Any],
+        logger: Mapping[str, Any],
+    ):
+        """Инициализирует калькулятор варианта.
+        
+        Args:
+            defaults: Словарь с настройками по умолчанию
+            identifiers: Словарь с настройками форматирования идентификаторов
+            logger: Логгер с методами info и debug
+        """
+        self.defaults = defaults
+        self.identifiers = identifiers
+        self.logger = logger
+        self.aggregator = Aggregator(defaults, identifiers, logger)
+    
+    def calculate(
+        self,
+        current_df: pd.DataFrame,
+        previous_df: pd.DataFrame,
+        previous2_df: Optional[pd.DataFrame],
+    ) -> pd.DataFrame:
+        """Вычисляет вариант прироста.
+        
+        Должен быть переопределен в наследниках.
+        
+        Args:
+            current_df: DataFrame с данными T-0
+            previous_df: DataFrame с данными T-1
+            previous2_df: DataFrame с данными T-2 (может быть None)
+        
+        Returns:
+            DataFrame с результатами расчета варианта
+        
+        Raises:
+            NotImplementedError: Если метод не переопределен
+        """
+        raise NotImplementedError("Метод calculate должен быть переопределен в наследнике")
+
+
+class Variant1Calculator(VariantCalculator):
+    """Калькулятор варианта 1: По КМ (manager_id), без учета ТБ.
+    
+    Логика расчета:
+    - Суммируем в каждом файле все что на КМ по manager_id
+    - Затем для каждого КМ вычитаем одно из другого
+    - Если T-2 указан: прирост = (T-0 - T-1) - (T-1 - T-2)
+    - Иначе: прирост = T-0 - T-1
+    """
+    
+    def calculate(
+        self,
+        current_df: pd.DataFrame,
+        previous_df: pd.DataFrame,
+        previous2_df: Optional[pd.DataFrame],
+    ) -> pd.DataFrame:
+        """Вычисляет вариант 1: По КМ, без ТБ.
+        
+        Args:
+            current_df: DataFrame с данными T-0
+            previous_df: DataFrame с данными T-1
+            previous2_df: DataFrame с данными T-2 (может быть None)
+        
+        Returns:
+            DataFrame с колонками: Таб. номер ВКО (выбранный), ВКО (выбранный),
+            Факт_T0, Факт_T1, Факт_T2 (если есть), Прирост
+        """
+        log_info(self.logger, "Расчет варианта 1: По КМ, без ТБ")
+        
+        # Агрегируем по manager_id в каждом файле
+        agg_t0 = self.aggregator.aggregate_facts(current_df, ["manager_id"], "T0", "V1")
+        agg_t1 = self.aggregator.aggregate_facts(previous_df, ["manager_id"], "T1", "V1")
+        
+        if previous2_df is not None:
+            agg_t2 = self.aggregator.aggregate_facts(previous2_df, ["manager_id"], "T2", "V1")
+            merged = (
+                pd.merge(agg_t0, agg_t1, on=["manager_id"], how="outer")
+                .merge(agg_t2, on=["manager_id"], how="outer")
+                .fillna({"Факт_T0": 0.0, "Факт_T1": 0.0, "Факт_T2": 0.0})
+            )
+            merged["Прирост"] = (merged["Факт_T0"] - merged["Факт_T1"]) - (merged["Факт_T1"] - merged["Факт_T2"])
+        else:
+            merged = (
+                pd.merge(agg_t0, agg_t1, on=["manager_id"], how="outer")
+                .fillna({"Факт_T0": 0.0, "Факт_T1": 0.0})
+            )
+            merged["Прирост"] = merged["Факт_T0"] - merged["Факт_T1"]
+        
+        # Добавляем информацию о менеджере из исходных данных
+        manager_info = pd.DataFrame(columns=["manager_id", "manager_name"])
+        if not current_df.empty:
+            manager_info = current_df[["manager_id", "manager_name"]].drop_duplicates()
+        elif not previous_df.empty:
+            manager_info = previous_df[["manager_id", "manager_name"]].drop_duplicates()
+        elif previous2_df is not None and not previous2_df.empty:
+            manager_info = previous2_df[["manager_id", "manager_name"]].drop_duplicates()
+        
+        if not manager_info.empty:
+            result = merged.merge(manager_info, on=["manager_id"], how="left")
+        else:
+            result = merged.copy()
+            result["manager_name"] = self.defaults.get("manager_name", "Не найден КМ")
+        
+        result = result.rename(columns={
+            "manager_id": SELECTED_MANAGER_ID_COL,
+            "manager_name": SELECTED_MANAGER_NAME_COL,
+        })
+        
+        return result
+
+
+class Variant2Calculator(VariantCalculator):
+    """Калькулятор варианта 2: По ИНН (client_id), КМ определяется на конец без учета ТБ.
+    
+    Логика расчета:
+    - Агрегация по client_id
+    - КМ определяется приоритетом: T-0 → T-1 → T-2 (если T-2 указан)
+    - Прирост рассчитывается с учетом T-2, если он указан
+    """
+    
+    def calculate(
+        self,
+        current_df: pd.DataFrame,
+        previous_df: pd.DataFrame,
+        previous2_df: Optional[pd.DataFrame],
+    ) -> pd.DataFrame:
+        """Вычисляет вариант 2: По ИНН, без ТБ.
+        
+        Args:
+            current_df: DataFrame с данными T-0
+            previous_df: DataFrame с данными T-1
+            previous2_df: DataFrame с данными T-2 (может быть None)
+        
+        Returns:
+            DataFrame с колонками: Таб. номер ВКО (выбранный), ВКО (выбранный),
+            Факт_T0, Факт_T1, Прирост
+        """
+        log_info(self.logger, "Расчет варианта 2: По ИНН, без ТБ")
+        
+        variant_df = self.aggregator.assemble_variant_dataset_with_t2(
+            variant_name="V2_ИНН_безТБ",
+            key_columns=["client_id"],
+            current_df=current_df,
+            previous_df=previous_df,
+            previous2_df=previous2_df,
+        )
+        
+        # Агрегируем по актуальному менеджеру
+        summary = self.aggregator.build_manager_summary(
+            variant_df=variant_df,
+            include_tb=False,
+            summary_name="V2_SUMMARY",
+            manager_columns={"id": "Таб. номер ВКО_Актуальный", "name": "ВКО_Актуальный"},
+        )
+        
+        return summary
+
+
+class Variant3Calculator(VariantCalculator):
+    """Калькулятор варианта 3: По ИНН (client_id), КМ определяется на конец с учетом ТБ.
+    
+    Логика расчета:
+    - Агрегация по client_id и tb
+    - КМ определяется приоритетом: T-0 → T-1 → T-2 (если T-2 указан)
+    - При агрегации учитываем ТБ: собираем данные по клиенту только для КМ с тем же ТБ
+    - Прирост рассчитывается с учетом T-2, если он указан
+    """
+    
+    def calculate(
+        self,
+        current_df: pd.DataFrame,
+        previous_df: pd.DataFrame,
+        previous2_df: Optional[pd.DataFrame],
+    ) -> pd.DataFrame:
+        """Вычисляет вариант 3: По ИНН, с учетом ТБ.
+        
+        Args:
+            current_df: DataFrame с данными T-0
+            previous_df: DataFrame с данными T-1
+            previous2_df: DataFrame с данными T-2 (может быть None)
+        
+        Returns:
+            DataFrame с колонками: Таб. номер ВКО (выбранный), ВКО (выбранный), ТБ,
+            Факт_T0, Факт_T1, Прирост
+        """
+        log_info(self.logger, "Расчет варианта 3: По ИНН, с учетом ТБ")
+        
+        variant_df = self.aggregator.assemble_variant_dataset_with_t2(
+            variant_name="V3_ИНН_сТБ",
+            key_columns=["client_id", "tb"],
+            current_df=current_df,
+            previous_df=previous_df,
+            previous2_df=previous2_df,
+        )
+        
+        # Агрегируем по актуальному менеджеру с учетом ТБ
+        summary = self.aggregator.build_manager_summary(
+            variant_df=variant_df,
+            include_tb=True,
+            summary_name="V3_SUMMARY",
+            manager_columns={"id": "Таб. номер ВКО_Актуальный", "name": "ВКО_Актуальный"},
+        )
+        
+        return summary
+
+
+class PercentileCalculator:
+    """Класс для расчета процентилей.
+    
+    Инкапсулирует логику расчета показателей "кого я обогнал" и "кто меня обогнал"
+    как в общем разрезе, так и в разрезе ТерБанков и с условиями.
+    
+    Методы:
+        append_percentile_columns: Добавляет колонки процентилей к таблице
+    """
+    
+    @staticmethod
+    def append_percentile_columns(
+        table: pd.DataFrame,
+        *,
+        value_column: str,
+        tb_column: Optional[str] = None,
+    ) -> pd.DataFrame:
+        """Добавляет в таблицу колонки процентных рангов и абсолютных значений.
+        
+        Добавляет следующие колонки:
+        - Обогнал_всего_%: процент КМ с меньшим результатом (всего)
+        - Обогнали_меня_всего_%: процент КМ с большим результатом (всего)
+        - Обогнал_всего_≥0_%: то же самое, но только для значений >= 0
+        - Обогнал_ТерБанк_%: процент КМ с меньшим результатом (в рамках ТБ)
+        - Обогнали_меня_ТерБанк_%: процент КМ с большим результатом (в рамках ТБ)
+        - Обогнал_ТерБанк_≥0_%: то же самое, но только для значений >= 0
+        - Аналогичные колонки с суффиксом _кол для абсолютных значений
+        - Равных_всего_кол, Равных_ТерБанк_кол: количество КМ с таким же результатом
+        - Всего_КМ_всего, Всего_КМ_ТерБанк: общее количество КМ для расчета
+        
+        Args:
+            table: DataFrame с данными для расчета процентилей
+            value_column: Имя колонки со значениями для расчета (например, "Прирост")
+            tb_column: Имя колонки с ТБ для группировки (например, "ТБ"). Если None, расчеты по ТБ не выполняются
+        
+        Returns:
+            DataFrame с добавленными колонками процентилей
+        
+        Raises:
+            KeyError: Если value_column не найдена в таблице
+        """
+        if value_column not in table.columns:
+            raise KeyError(
+                f"Колонка '{value_column}' не найдена в таблице для расчёта процентилей."
+            )
+
+        prepared = table.copy()
+        values = pd.to_numeric(prepared[value_column], errors="coerce").fillna(0.0)
+
+        obognal_all, obognali_all, count_less_all, count_greater_all, count_equal_all, total_all = _compute_percentile_pair(values)
+        prepared["Обогнал_всего_%"] = obognal_all
+        prepared["Обогнали_меня_всего_%"] = obognali_all
+        prepared["Обогнал_всего_кол"] = count_less_all
+        prepared["Обогнали_меня_всего_кол"] = count_greater_all
+        prepared["Равных_всего_кол"] = count_equal_all
+        prepared["Всего_КМ_всего"] = total_all
+
+        mask_non_negative = values >= 0
+        if mask_non_negative.any():
+            obognal_ge0, obognali_ge0, count_less_ge0, count_greater_ge0, count_equal_ge0, total_ge0 = _compute_percentile_pair(values[mask_non_negative])
+            prepared["Обогнал_всего_≥0_%"] = obognal_ge0.reindex(
+                prepared.index, fill_value=0.0
+            )
+            prepared["Обогнали_меня_всего_≥0_%"] = obognali_ge0.reindex(
+                prepared.index, fill_value=0.0
+            )
+            prepared["Обогнал_всего_≥0_кол"] = count_less_ge0.reindex(
+                prepared.index, fill_value=0.0
+            )
+            prepared["Обогнали_меня_всего_≥0_кол"] = count_greater_ge0.reindex(
+                prepared.index, fill_value=0.0
+            )
+            prepared["Равных_всего_≥0_кол"] = count_equal_ge0.reindex(
+                prepared.index, fill_value=0.0
+            )
+            prepared["Всего_КМ_всего_≥0"] = total_ge0.reindex(
+                prepared.index, fill_value=0.0
+            )
+        else:
+            prepared["Обогнал_всего_≥0_%"] = 0.0
+            prepared["Обогнали_меня_всего_≥0_%"] = 0.0
+            prepared["Обогнал_всего_≥0_кол"] = 0.0
+            prepared["Обогнали_меня_всего_≥0_кол"] = 0.0
+            prepared["Равных_всего_≥0_кол"] = 0.0
+            prepared["Всего_КМ_всего_≥0"] = 0.0
+
+        tb_column_present = tb_column and tb_column in prepared.columns
+        tb_columns = [
+            "Обогнал_ТерБанк_%",
+            "Обогнали_меня_ТерБанк_%",
+            "Обогнал_ТерБанк_≥0_%",
+            "Обогнали_меня_ТерБанк_≥0_%",
+        ]
+        tb_count_columns = [
+            "Обогнал_ТерБанк_кол",
+            "Обогнали_меня_ТерБанк_кол",
+            "Равных_ТерБанк_кол",
+            "Всего_КМ_ТерБанк",
+            "Обогнал_ТерБанк_≥0_кол",
+            "Обогнали_меня_ТерБанк_≥0_кол",
+            "Равных_ТерБанк_≥0_кол",
+            "Всего_КМ_ТерБанк_≥0",
+        ]
+        if tb_column_present:
+            for column in tb_columns + tb_count_columns:
+                prepared[column] = 0.0
+
+            for _, group in prepared.groupby(tb_column):
+                subset_values = values.loc[group.index]
+                obognal_tb, obognali_tb, count_less_tb, count_greater_tb, count_equal_tb, total_tb = _compute_percentile_pair(subset_values)
+                prepared.loc[group.index, "Обогнал_ТерБанк_%"] = obognal_tb
+                prepared.loc[group.index, "Обогнали_меня_ТерБанк_%"] = obognali_tb
+                prepared.loc[group.index, "Обогнал_ТерБанк_кол"] = count_less_tb
+                prepared.loc[group.index, "Обогнали_меня_ТерБанк_кол"] = count_greater_tb
+                prepared.loc[group.index, "Равных_ТерБанк_кол"] = count_equal_tb
+                prepared.loc[group.index, "Всего_КМ_ТерБанк"] = total_tb
+
+                tb_mask = subset_values >= 0
+                if tb_mask.any():
+                    obognal_tb_ge0, obognali_tb_ge0, count_less_tb_ge0, count_greater_tb_ge0, count_equal_tb_ge0, total_tb_ge0 = _compute_percentile_pair(
+                        subset_values[tb_mask]
+                    )
+                    idx = subset_values[tb_mask].index
+                    prepared.loc[idx, "Обогнал_ТерБанк_≥0_%"] = obognal_tb_ge0
+                    prepared.loc[idx, "Обогнали_меня_ТерБанк_≥0_%"] = obognali_tb_ge0
+                    prepared.loc[idx, "Обогнал_ТерБанк_≥0_кол"] = count_less_tb_ge0
+                    prepared.loc[idx, "Обогнали_меня_ТерБанк_≥0_кол"] = count_greater_tb_ge0
+                    prepared.loc[idx, "Равных_ТерБанк_≥0_кол"] = count_equal_tb_ge0
+                    prepared.loc[idx, "Всего_КМ_ТерБанк_≥0"] = total_tb_ge0
+        else:
+            for column in tb_columns + tb_count_columns:
+                prepared[column] = 0.0
+
+        percent_columns = [
+            "Обогнал_всего_%",
+            "Обогнали_меня_всего_%",
+            "Обогнал_всего_≥0_%",
+            "Обогнали_меня_всего_≥0_%",
+            "Обогнал_ТерБанк_%",
+            "Обогнали_меня_ТерБанк_%",
+            "Обогнал_ТерБанк_≥0_%",
+            "Обогнали_меня_ТерБанк_≥0_%",
+        ]
+        for column in percent_columns:
+            if column in prepared.columns:
+                prepared[column] = prepared[column].round(2)
+
+        return prepared
+
+
+class ExcelExporter:
+    """Класс для экспорта данных в Excel с форматированием.
+    
+    Инкапсулирует логику записи DataFrame в Excel файлы с применением
+    форматирования: ширина колонок, выравнивание, числовые форматы.
+    
+    Методы:
+        format_sheet: Применяет форматирование к листу Excel
+        write_sheet: Записывает DataFrame в лист Excel с форматированием
+    """
+    
+    @staticmethod
+    def format_sheet(writer: pd.ExcelWriter, sheet_name: str, df: pd.DataFrame) -> None:
+        """Применяет форматирование листа Excel через openpyxl.
+        
+        Выполняет следующие операции:
+        1. Замораживает первую строку (заголовки)
+        2. Включает автофильтр
+        3. Форматирует заголовки (жирный шрифт, перенос текста)
+        4. Настраивает ширину колонок (70-200 символов)
+        5. Применяет числовые форматы:
+           - #,##0.00 для процентов и фактов
+           - #,##0 для количеств
+        
+        Args:
+            writer: ExcelWriter для записи
+            sheet_name: Имя листа для форматирования
+            df: DataFrame с данными (используется для определения типов колонок)
+        """
+        workbook = writer.book
+        worksheet = workbook[sheet_name]
+
+        if df.empty:
+            return
+
+        worksheet.freeze_panes = worksheet["A2"]
+        worksheet.auto_filter.ref = worksheet.dimensions
+
+        header_alignment = Alignment(wrap_text=True)
+        wrap_alignment = Alignment(wrap_text=True)
+        number_alignment = Alignment(wrap_text=True)
+        header_font = Font(bold=True)
+
+        for cell in next(worksheet.iter_rows(min_row=1, max_row=1)):
+            cell.font = header_font
+            cell.alignment = header_alignment
+
+        for col_idx, column in enumerate(df.columns, start=1):
+            values = [column] + df[column].tolist()
+            max_len = max((len(str(value)) for value in values), default=0) + 2
+            width = clamp_width(max_len)
+            column_letter = get_column_letter(col_idx)
+            worksheet.column_dimensions[column_letter].width = width
+
+            if worksheet.max_row >= 2:
+                data_range = worksheet[f"{column_letter}2": f"{column_letter}{worksheet.max_row}"]
+                if (
+                    column.startswith("Факт")
+                    or column == "Прирост"
+                    or "Обогнал" in column
+                    or "Обогнали" in column
+                ):
+                    for cell_tuple in data_range:
+                        for item in cell_tuple:
+                            item.number_format = "#,##0.00"
+                            item.alignment = number_alignment
+                elif "_кол" in column or "Всего_КМ" in column:
+                    # Колонки с количеством - целые числа
+                    for cell_tuple in data_range:
+                        for item in cell_tuple:
+                            item.number_format = "#,##0"
+                            item.alignment = number_alignment
+                else:
+                    for cell_tuple in data_range:
+                        for item in cell_tuple:
+                            item.alignment = wrap_alignment
+    
+    @staticmethod
+    def write_sheet(
+        writer: pd.ExcelWriter,
+        sheet_name: str,
+        df: pd.DataFrame,
+        written_sheets: Set[str],
+    ) -> None:
+        """Записывает DataFrame в лист Excel с форматированием.
+        
+        Проверяет, не был ли лист уже записан, и если нет - записывает данные
+        и применяет форматирование.
+        
+        Args:
+            writer: ExcelWriter для записи
+            sheet_name: Имя листа для записи
+            df: DataFrame с данными
+            written_sheets: Множество уже записанных листов (изменяется на месте)
+        """
+        if sheet_name in written_sheets:
+            return
+        df.to_excel(writer, sheet_name=sheet_name, index=False)
+        ExcelExporter.format_sheet(writer, sheet_name, df)
+        written_sheets.add(sheet_name)
+
+
 def build_logger(log_dir: Path, topic: str) -> Dict[str, Any]:
     """Инициализирует файловый логгер и возвращает набор функций."""
 
@@ -720,63 +1712,29 @@ def log_debug(
 def read_source_file(
     file_path: Path,
     sheet_name: str,
-    column_maps: Mapping[str, str],
+    columns: List[Dict[str, str]],
     drop_rules: Mapping[str, Iterable[str]],
     identifiers: Mapping[str, Mapping[str, Any]],
     logger: Mapping[str, Any],
 ) -> pd.DataFrame:
-    """Загружает исходный Excel и подготавливает данные."""
-
-    if not file_path.exists():
-        raise FileNotFoundError(f"Файл не найден: {file_path}")
-
-    log_info(logger, f"Загружаю данные из файла {file_path.name}")
-    # Читаем один лист Excel и сразу переименовываем колонки в единый формат.
-    raw_df = pd.read_excel(file_path, sheet_name=sheet_name)
-    renamed = raw_df.rename(columns=column_maps)
-
-    required_columns = list(column_maps.values())
-    missing = [col for col in required_columns if col not in renamed.columns]
-    if missing:
-        raise ValueError(
-            f"Отсутствуют обязательные колонки {missing} в файле {file_path}"
-        )
-
-    prepared = renamed[required_columns].copy()
-
-    # Строковые столбцы очищаем от пробелов и None.
-    for column in ("tb", "gosb", "manager_name"):
-        prepared[column] = prepared[column].apply(normalize_string)
-
-    manager_identifier = identifiers["manager_id"]
-    client_identifier = identifiers["client_id"]
-
-    # Форматируем табельные номера и ИНН в заранее заданную длину.
-    prepared["manager_id"] = prepared["manager_id"].apply(
-        lambda value: format_identifier(
-            value=value,
-            total_length=manager_identifier["total_length"],
-            fill_char=manager_identifier["fill_char"],
-        )
-    )
-    prepared["client_id"] = prepared["client_id"].apply(
-        lambda value: format_identifier(
-            value=value,
-            total_length=client_identifier["total_length"],
-            fill_char=client_identifier["fill_char"],
-        )
-    )
-
-    prepared["fact_value_clean"] = prepared["fact_value"].apply(safe_to_float)
-
-    cleaned = drop_forbidden_rows(prepared, drop_rules, logger)
-    log_debug(
-        logger,
-        f"После очистки в {file_path.name} осталось строк: {len(cleaned)}",
-        class_name="DataLoader",
-        func_name="read_source_file",
-    )
-    return cleaned
+    """Загружает исходный Excel и подготавливает данные.
+    
+    Функция-обертка для DataLoader.read_source_file.
+    Сохранена для обратной совместимости.
+    
+    Args:
+        file_path: Путь к файлу Excel
+        sheet_name: Имя листа для чтения
+        columns: Список словарей с alias и source для колонок
+        drop_rules: Правила фильтрации строк
+        identifiers: Настройки форматирования идентификаторов
+        logger: Логгер для записи сообщений
+    
+    Returns:
+        DataFrame с очищенными и отформатированными данными
+    """
+    data_loader = DataLoader(identifiers, logger)
+    return data_loader.read_source_file(file_path, sheet_name, columns, drop_rules)
 
 
 def drop_forbidden_rows(
@@ -784,26 +1742,23 @@ def drop_forbidden_rows(
     drop_rules: Mapping[str, Iterable[str]],
     logger: Mapping[str, Any],
 ) -> pd.DataFrame:
-    """Удаляет строки с запрещёнными значениями."""
-
-    cleaned = df.copy()
-    for column, values in drop_rules.items():
-        forbidden = {value.lower() for value in values}
-
-        def is_forbidden(value: Any) -> bool:
-            if value is None:
-                return False
-            return str(value).strip().lower() in forbidden
-
-        before = len(cleaned)
-        cleaned = cleaned[~cleaned[column].apply(is_forbidden)]
-        log_debug(
-            logger,
-            f"Колонка {column}: удалено {before - len(cleaned)} строк",
-            class_name="Cleaner",
-            func_name="drop_forbidden_rows",
-        )
-    return cleaned
+    """Удаляет строки с запрещёнными значениями.
+    
+    Функция-обертка для DataLoader.drop_forbidden_rows.
+    Сохранена для обратной совместимости.
+    
+    Args:
+        df: DataFrame для очистки
+        drop_rules: Словарь {column_alias: tuple(forbidden_values)}
+        logger: Логгер для записи сообщений
+    
+    Returns:
+        DataFrame без запрещенных строк
+    """
+    # Создаем временный загрузчик (identifiers не нужны для drop_forbidden_rows)
+    identifiers = {"manager_id": {"total_length": 8, "fill_char": "0"}, "client_id": {"total_length": 12, "fill_char": "0"}}
+    data_loader = DataLoader(identifiers, logger)
+    return data_loader.drop_forbidden_rows(df, drop_rules)
 
 
 # -------------------------- Агрегация данных --------------------------------
@@ -816,22 +1771,26 @@ def aggregate_facts(
     logger: Mapping[str, Any],
     variant_name: str,
 ) -> pd.DataFrame:
-    """Группирует данные по ключу и суммирует факт."""
-
-    grouped = (
-        df[key_columns + ["fact_value_clean"]]
-        .fillna({"fact_value_clean": 0.0})
-        .groupby(key_columns, dropna=False, as_index=False)
-        .sum(numeric_only=True)
-    )
-    renamed = grouped.rename(columns={"fact_value_clean": f"Факт_{suffix}"})
-    log_debug(
-        logger,
-        f"{variant_name}: агрегировано {len(renamed)} строк для суффикса {suffix}",
-        class_name="Aggregator",
-        func_name="aggregate_facts",
-    )
-    return renamed
+    """Группирует данные по ключу и суммирует факт.
+    
+    Функция-обертка для Aggregator.aggregate_facts.
+    Сохранена для обратной совместимости.
+    
+    Args:
+        df: Исходный DataFrame с данными
+        key_columns: Список колонок для группировки
+        suffix: Суффикс для имени результирующей колонки
+        logger: Логгер для записи сообщений
+        variant_name: Имя варианта для логирования
+    
+    Returns:
+        DataFrame с колонками key_columns и Факт_{suffix}
+    """
+    # Создаем временный агрегатор (defaults и identifiers не нужны для aggregate_facts)
+    defaults = {"manager_name": "", "manager_id": ""}
+    identifiers = {"manager_id": {"total_length": 8, "fill_char": "0"}, "client_id": {"total_length": 12, "fill_char": "0"}}
+    aggregator = Aggregator(defaults, identifiers, logger)
+    return aggregator.aggregate_facts(df, key_columns, suffix, variant_name)
 
 
 def select_best_manager(
@@ -841,46 +1800,23 @@ def select_best_manager(
     variant_name: str,
 ) -> pd.DataFrame:
     """Определяет доминантного менеджера (по сумме факта) для каждого ключа.
-
-    Алгоритм:
-    1. Формируется составной ключ (например, client_id или client_id+tb) и
-       расширяется парой полей менеджера (ФИО + табельный номер), если те ещё
-       не входят в key_columns.
-    2. Группируем данные по (ключ, manager_id, manager_name) и суммируем
-       fact_value_clean, тем самым получаем суммарный вклад каждого ТН по
-       конкретному клиенту/объекту.
-    3. Выбираем строку с максимальной суммой. Если суммы равны, pandas idxmax
-       вернёт первую попавшуюся — этого достаточно по ТЗ.
+    
+    Функция-обертка для Aggregator.select_best_manager.
+    Сохранена для обратной совместимости.
+    
+    Args:
+        df: Исходный DataFrame с данными
+        key_columns: Список колонок для ключа
+        logger: Логгер для записи сообщений
+        variant_name: Имя варианта для логирования
+    
+    Returns:
+        DataFrame с колонками key_columns, "ВКО", "Таб. номер ВКО"
     """
-
-    additional_columns = [
-        column for column in ("manager_name", "manager_id") if column not in key_columns
-    ]
-    grouping_columns = key_columns + additional_columns
-    grouped = (
-        df[grouping_columns + ["fact_value_clean"]]
-        .fillna({"fact_value_clean": 0.0})
-        .groupby(grouping_columns, dropna=False, as_index=False)
-        .sum(numeric_only=True)
-    )
-    idx = grouped.groupby(key_columns, dropna=False)["fact_value_clean"].idxmax()
-    best = grouped.loc[idx, key_columns + additional_columns].copy()
-    result = best.copy()
-    if "manager_name" in result.columns and "manager_name" not in key_columns:
-        result = result.rename(columns={"manager_name": "ВКО"})
-    if "manager_id" in key_columns and "manager_id" in result.columns:
-        result["Таб. номер ВКО"] = result["manager_id"]
-    elif "manager_id" in result.columns:
-        result = result.rename(columns={"manager_id": "Таб. номер ВКО"})
-    # На выходе каждая строка — конкретный ключ (например client_id + manager_id)
-    # и менеджер, который показал максимальный факт.
-    log_debug(
-        logger,
-        f"{variant_name}: выбраны менеджеры для {len(result)} ключей",
-        class_name="Aggregator",
-        func_name="select_best_manager",
-    )
-    return result
+    defaults = {"manager_name": "", "manager_id": ""}
+    identifiers = {"manager_id": {"total_length": 8, "fill_char": "0"}, "client_id": {"total_length": 12, "fill_char": "0"}}
+    aggregator = Aggregator(defaults, identifiers, logger)
+    return aggregator.select_best_manager(df, key_columns, variant_name)
 
 
 def build_latest_manager(
@@ -892,44 +1828,25 @@ def build_latest_manager(
     logger: Mapping[str, Any],
     variant_name: str,
 ) -> pd.DataFrame:
-    """Комбинирует менеджеров, отдавая приоритет файлу T-0."""
-
-    default_name = defaults["manager_name"]
-    identifier_settings = identifiers["manager_id"]
-    default_id = format_identifier(
-        defaults["manager_id"],
-        total_length=identifier_settings["total_length"],
-        fill_char=identifier_settings["fill_char"],
-    )
-
-    curr = (
-        current_best.set_index(key_columns)
-        if not current_best.empty
-        else pd.DataFrame(columns=key_columns + ["ВКО", "Таб. номер ВКО"]).set_index(key_columns)
-    )
-    prev = (
-        previous_best.set_index(key_columns)
-        if not previous_best.empty
-        else pd.DataFrame(columns=key_columns + ["ВКО", "Таб. номер ВКО"]).set_index(key_columns)
-    )
-
-    combined = prev.join(
-        curr,
-        how="outer",
-        lsuffix="_prev",
-        rsuffix="_curr",
-    )
-    combined["ВКО_Актуальный"] = combined["ВКО_curr"].combine_first(combined["ВКО_prev"]).fillna(default_name)
-    combined["Таб. номер ВКО_Актуальный"] = combined["Таб. номер ВКО_curr"].combine_first(combined["Таб. номер ВКО_prev"]).fillna(default_id)
-
-    result = combined.reset_index()[key_columns + ["ВКО_Актуальный", "Таб. номер ВКО_Актуальный"]]
-    log_debug(
-        logger,
-        f"{variant_name}: определены актуальные менеджеры для {len(result)} ключей",
-        class_name="Aggregator",
-        func_name="build_latest_manager",
-    )
-    return result
+    """Комбинирует менеджеров, отдавая приоритет файлу T-0.
+    
+    Функция-обертка для Aggregator.build_latest_manager.
+    Сохранена для обратной совместимости.
+    
+    Args:
+        current_best: DataFrame с менеджерами из T-0
+        previous_best: DataFrame с менеджерами из T-1
+        key_columns: Список колонок для ключа
+        defaults: Настройки по умолчанию
+        identifiers: Настройки форматирования идентификаторов
+        logger: Логгер для записи сообщений
+        variant_name: Имя варианта для логирования
+    
+    Returns:
+        DataFrame с колонками key_columns, "ВКО_Актуальный", "Таб. номер ВКО_Актуальный"
+    """
+    aggregator = Aggregator(defaults, identifiers, logger)
+    return aggregator.build_latest_manager(current_best, previous_best, key_columns, variant_name)
 
 
 def assemble_variant_dataset(
@@ -995,36 +1912,26 @@ def build_manager_summary(
     summary_name: str,
     manager_columns: Mapping[str, str],
 ) -> pd.DataFrame:
-    """Создаёт свод по уникальным ТН+ВКО (+ТБ опционально)."""
-
-    manager_id_col = manager_columns["id"]
-    manager_name_col = manager_columns["name"]
-
-    group_columns = [manager_id_col, manager_name_col]
-    tb_column_present = include_tb and "tb" in variant_df.columns
-    if tb_column_present:
-        group_columns.append("tb")
-
-    grouped = (
-        variant_df.groupby(group_columns, dropna=False)[["Факт_T0", "Факт_T1", "Прирост"]]
-        .sum()
-        .reset_index()
-    )
-    rename_map = {
-        manager_id_col: SELECTED_MANAGER_ID_COL,
-        manager_name_col: SELECTED_MANAGER_NAME_COL,
-    }
-    if tb_column_present:
-        rename_map["tb"] = "ТБ"
-    grouped = grouped.rename(columns=rename_map)
-
-    log_debug(
-        logger,
-        f"{summary_name}: агрегировано {len(grouped)} строк",
-        class_name="Aggregator",
-        func_name="build_manager_summary",
-    )
-    return grouped
+    """Создаёт свод по уникальным ТН+ВКО (+ТБ опционально).
+    
+    Функция-обертка для Aggregator.build_manager_summary.
+    Сохранена для обратной совместимости.
+    
+    Args:
+        variant_df: DataFrame с данными варианта
+        include_tb: Если True, добавляет ТБ в группировку
+        logger: Логгер для записи сообщений
+        summary_name: Имя свода для логирования
+        manager_columns: Словарь с именами колонок {"id": "...", "name": "..."}
+    
+    Returns:
+        DataFrame с колонками: Таб. номер ВКО (выбранный), ВКО (выбранный), ТБ (если include_tb),
+        Факт_T0, Факт_T1, Прирост
+    """
+    defaults = {"manager_name": "", "manager_id": ""}
+    identifiers = {"manager_id": {"total_length": 8, "fill_char": "0"}, "client_id": {"total_length": 12, "fill_char": "0"}}
+    aggregator = Aggregator(defaults, identifiers, logger)
+    return aggregator.build_manager_summary(variant_df, include_tb, summary_name, manager_columns)
 
 
 def clamp_width(length: int) -> int:
@@ -1034,55 +1941,17 @@ def clamp_width(length: int) -> int:
 
 
 def format_excel_sheet(writer: pd.ExcelWriter, sheet_name: str, df: pd.DataFrame) -> None:
-    """Применяет форматирование листа Excel через openpyxl."""
-
-    workbook = writer.book
-    worksheet = workbook[sheet_name]
-
-    if df.empty:
-        return
-
-    worksheet.freeze_panes = worksheet["A2"]
-    worksheet.auto_filter.ref = worksheet.dimensions
-
-    header_alignment = Alignment(wrap_text=True)
-    wrap_alignment = Alignment(wrap_text=True)
-    number_alignment = Alignment(wrap_text=True)
-    header_font = Font(bold=True)
-
-    for cell in next(worksheet.iter_rows(min_row=1, max_row=1)):
-        cell.font = header_font
-        cell.alignment = header_alignment
-
-    for col_idx, column in enumerate(df.columns, start=1):
-        values = [column] + df[column].tolist()
-        max_len = max((len(str(value)) for value in values), default=0) + 2
-        width = clamp_width(max_len)
-        column_letter = get_column_letter(col_idx)
-        worksheet.column_dimensions[column_letter].width = width
-
-        if worksheet.max_row >= 2:
-            data_range = worksheet[f"{column_letter}2": f"{column_letter}{worksheet.max_row}"]
-            if (
-                column.startswith("Факт")
-                or column == "Прирост"
-                or "Обогнал" in column
-                or "Обогнали" in column
-            ):
-                for cell_tuple in data_range:
-                    for item in cell_tuple:
-                        item.number_format = "#,##0.00"
-                        item.alignment = number_alignment
-            elif "_кол" in column or "Всего_КМ" in column:
-                # Колонки с количеством - целые числа
-                for cell_tuple in data_range:
-                    for item in cell_tuple:
-                        item.number_format = "#,##0"
-                        item.alignment = number_alignment
-            else:
-                for cell_tuple in data_range:
-                    for item in cell_tuple:
-                        item.alignment = wrap_alignment
+    """Применяет форматирование листа Excel через openpyxl.
+    
+    Функция-обертка для ExcelExporter.format_sheet.
+    Сохранена для обратной совместимости.
+    
+    Args:
+        writer: ExcelWriter для записи
+        sheet_name: Имя листа для форматирования
+        df: DataFrame с данными
+    """
+    ExcelExporter.format_sheet(writer, sheet_name, df)
 
 
 def format_decimal_string(value: float, decimals: int = 5) -> str:
@@ -1254,6 +2123,155 @@ def build_direct_manager_summary(
         func_name="build_direct_manager_summary",
     )
     return result
+
+
+def build_latest_manager_with_t2(
+    current_best: pd.DataFrame,
+    previous_best: pd.DataFrame,
+    previous2_best: Optional[pd.DataFrame],
+    key_columns: List[str],
+    defaults: Mapping[str, Any],
+    identifiers: Mapping[str, Any],
+    logger: Mapping[str, Any],
+    variant_name: str,
+) -> pd.DataFrame:
+    """Комбинирует менеджеров, отдавая приоритет файлу T-0, затем T-1, затем T-2.
+    
+    Функция-обертка для Aggregator.build_latest_manager_with_t2.
+    Сохранена для обратной совместимости.
+    
+    Args:
+        current_best: DataFrame с менеджерами из T-0
+        previous_best: DataFrame с менеджерами из T-1
+        previous2_best: DataFrame с менеджерами из T-2 (может быть None)
+        key_columns: Список колонок для ключа
+        defaults: Настройки по умолчанию
+        identifiers: Настройки форматирования идентификаторов
+        logger: Логгер для записи сообщений
+        variant_name: Имя варианта для логирования
+    
+    Returns:
+        DataFrame с колонками key_columns, "ВКО_Актуальный", "Таб. номер ВКО_Актуальный"
+    """
+    aggregator = Aggregator(defaults, identifiers, logger)
+    return aggregator.build_latest_manager_with_t2(current_best, previous_best, previous2_best, key_columns, variant_name)
+
+
+def assemble_variant_dataset_with_t2(
+    variant_name: str,
+    key_columns: List[str],
+    current_df: pd.DataFrame,
+    previous_df: pd.DataFrame,
+    previous2_df: Optional[pd.DataFrame],
+    defaults: Mapping[str, Any],
+    identifiers: Mapping[str, Any],
+    logger: Mapping[str, Any],
+) -> pd.DataFrame:
+    """Формирует таблицу для конкретного варианта ключа с поддержкой T-2.
+    
+    Функция-обертка для Aggregator.assemble_variant_dataset_with_t2.
+    Сохранена для обратной совместимости.
+    
+    Args:
+        variant_name: Имя варианта для логирования
+        key_columns: Список колонок для ключа агрегации
+        current_df: DataFrame с данными T-0
+        previous_df: DataFrame с данными T-1
+        previous2_df: DataFrame с данными T-2 (может быть None)
+        defaults: Настройки по умолчанию
+        identifiers: Настройки форматирования идентификаторов
+        logger: Логгер для записи сообщений
+    
+    Returns:
+        DataFrame с колонками key_columns, Факт_T0, Факт_T1, Факт_T2 (если есть),
+        Прирост, ВКО_T0, ВКО_T1, ВКО_T2 (если есть), ВКО_Актуальный, Таб. номер ВКО_Актуальный
+    """
+    aggregator = Aggregator(defaults, identifiers, logger)
+    return aggregator.assemble_variant_dataset_with_t2(
+        variant_name, key_columns, current_df, previous_df, previous2_df
+    )
+
+
+# Функции-обертки для обратной совместимости (используют классы внутри)
+def calculate_variant_1(
+    current_df: pd.DataFrame,
+    previous_df: pd.DataFrame,
+    previous2_df: Optional[pd.DataFrame],
+    defaults: Mapping[str, Any],
+    identifiers: Mapping[str, Any],
+    logger: Mapping[str, Any],
+) -> pd.DataFrame:
+    """Вариант 1: По КМ (manager_id), без учета ТБ.
+    
+    Функция-обертка для Variant1Calculator.
+    
+    Args:
+        current_df: DataFrame с данными T-0
+        previous_df: DataFrame с данными T-1
+        previous2_df: DataFrame с данными T-2 (может быть None)
+        defaults: Настройки по умолчанию
+        identifiers: Настройки форматирования идентификаторов
+        logger: Логгер для записи сообщений
+    
+    Returns:
+        DataFrame с результатами варианта 1
+    """
+    calculator = Variant1Calculator(defaults, identifiers, logger)
+    return calculator.calculate(current_df, previous_df, previous2_df)
+
+
+def calculate_variant_2(
+    current_df: pd.DataFrame,
+    previous_df: pd.DataFrame,
+    previous2_df: Optional[pd.DataFrame],
+    defaults: Mapping[str, Any],
+    identifiers: Mapping[str, Any],
+    logger: Mapping[str, Any],
+) -> pd.DataFrame:
+    """Вариант 2: По ИНН (client_id), КМ определяется на конец без учета ТБ.
+    
+    Функция-обертка для Variant2Calculator.
+    
+    Args:
+        current_df: DataFrame с данными T-0
+        previous_df: DataFrame с данными T-1
+        previous2_df: DataFrame с данными T-2 (может быть None)
+        defaults: Настройки по умолчанию
+        identifiers: Настройки форматирования идентификаторов
+        logger: Логгер для записи сообщений
+    
+    Returns:
+        DataFrame с результатами варианта 2
+    """
+    calculator = Variant2Calculator(defaults, identifiers, logger)
+    return calculator.calculate(current_df, previous_df, previous2_df)
+
+
+def calculate_variant_3(
+    current_df: pd.DataFrame,
+    previous_df: pd.DataFrame,
+    previous2_df: Optional[pd.DataFrame],
+    defaults: Mapping[str, Any],
+    identifiers: Mapping[str, Any],
+    logger: Mapping[str, Any],
+) -> pd.DataFrame:
+    """Вариант 3: По ИНН (client_id), КМ определяется на конец с учетом ТБ.
+    
+    Функция-обертка для Variant3Calculator.
+    
+    Args:
+        current_df: DataFrame с данными T-0
+        previous_df: DataFrame с данными T-1
+        previous2_df: DataFrame с данными T-2 (может быть None)
+        defaults: Настройки по умолчанию
+        identifiers: Настройки форматирования идентификаторов
+        logger: Логгер для записи сообщений
+    
+    Returns:
+        DataFrame с результатами варианта 3
+    """
+    calculator = Variant3Calculator(defaults, identifiers, logger)
+    return calculator.calculate(current_df, previous_df, previous2_df)
 
 
 def build_variant_matrix(
@@ -1452,22 +2470,26 @@ def build_variant_matrix(
 
 
 def process_project(project_root: Path) -> None:
-    """Запускает полный цикл обработки данных."""
-
-    # 1. Собираем настройки (файлы, фильтры, идентификаторы, листы Excel).
-    # 2. Загружаем T-0/T-1, чистим их и агрегируем по набору ключей.
-    # 3. Строим итоговые своды + выгрузку СПОД и сохраняем Excel/CSV.
-
+    """Запускает полный цикл обработки данных.
+    
+    Основная функция-оркестратор, которая:
+    1. Загружает настройки проекта
+    2. Инициализирует компоненты (DataLoader, VariantCalculator, PercentileCalculator, ExcelExporter)
+    3. Загружает исходные файлы (T-0, T-1, T-2 если указан)
+    4. Рассчитывает 3 варианта прироста
+    5. Добавляет процентили для каждого варианта
+    6. Экспортирует результаты в Excel
+    
+    Args:
+        project_root: Корневая директория проекта (содержит IN/, OUT/, log/)
+    """
+    # 1. Собираем настройки (файлы, фильтры, идентификаторы, листы Excel)
     settings = build_settings_tree()
     file_section = settings["files"]
-    column_profiles = build_column_profiles(file_section["columns"])
-    rename_map = column_profiles["rename_map"]
-    alias_to_source = column_profiles["alias_to_source"]
-    drop_rules = build_drop_rules(settings["filters"]["drop_rules"])
     defaults = settings["defaults"]
     identifiers = settings["identifiers"]
     spod_config = settings["spod"]
-    spod_variants_config = settings.get("spod_variants", [])
+    variants_config = settings.get("variants", {})
     report_layout = settings.get("report_layout", {})
 
     def build_whitelist(key: str) -> Optional[Set[str]]:
@@ -1485,12 +2507,14 @@ def process_project(project_root: Path) -> None:
     spod_variant_whitelist = build_whitelist("spod_variants")
     raw_sheet_whitelist = build_whitelist("raw_sheets")
 
-    # Готовим быстрый индекс по ключам файлов (current / previous).
+    # Готовим быстрый индекс по ключам файлов (current / previous / previous2).
     file_index = {item["key"]: item for item in file_section["items"]}
     current_meta = file_index["current"]
     previous_meta = file_index["previous"]
-    sheet_current = resolve_sheet_name(file_section, "current")
-    sheet_previous = resolve_sheet_name(file_section, "previous")
+    previous2_meta = file_index.get("previous2")
+    
+    # Проверяем, используется ли T-2 (если file_name не пустое)
+    use_t2 = previous2_meta is not None and previous2_meta.get("file_name", "").strip() != ""
 
     input_dir = project_root / "IN"
     output_dir = project_root / "OUT"
@@ -1516,8 +2540,25 @@ def process_project(project_root: Path) -> None:
         return False
 
     try:
+        # Получаем колонки и фильтры для каждого файла
+        current_columns = get_file_columns(file_section, "current")
+        current_filters = get_file_filters(file_section, "current")
+        current_drop_rules = build_drop_rules(current_filters.get("drop_rules", []))
+        current_column_profiles = build_column_profiles(current_columns)
+        current_rename_map = current_column_profiles["rename_map"]
+        current_alias_to_source = current_column_profiles["alias_to_source"]
+        
+        previous_columns = get_file_columns(file_section, "previous")
+        previous_filters = get_file_filters(file_section, "previous")
+        previous_drop_rules = build_drop_rules(previous_filters.get("drop_rules", []))
+        previous_column_profiles = build_column_profiles(previous_columns)
+        previous_rename_map = previous_column_profiles["rename_map"]
+        previous_alias_to_source = previous_column_profiles["alias_to_source"]
+        
         current_file = input_dir / current_meta["file_name"]
         previous_file = input_dir / previous_meta["file_name"]
+        sheet_current = resolve_sheet_name(file_section, "current")
+        sheet_previous = resolve_sheet_name(file_section, "previous")
 
         if not current_file.exists() or not previous_file.exists():
             log_info(
@@ -1527,145 +2568,98 @@ def process_project(project_root: Path) -> None:
             )
             return
 
-        current_df = read_source_file(
+        # Инициализируем загрузчик данных
+        data_loader = DataLoader(identifiers, logger)
+        
+        # Загружаем файлы T-0 и T-1
+        current_df = data_loader.read_source_file(
             current_file,
             sheet_current,
-            rename_map,
-            drop_rules,
-            identifiers,
-            logger,
+            current_columns,
+            current_drop_rules,
         )
-        previous_df = read_source_file(
+        previous_df = data_loader.read_source_file(
             previous_file,
             sheet_previous,
-            rename_map,
-            drop_rules,
-            identifiers,
-            logger,
+            previous_columns,
+            previous_drop_rules,
         )
-
-        # Строим соответствие табельного номера и ТБ из исходных данных
-        manager_tb_mapping = build_manager_tb_mapping(current_df, previous_df)
-
-        scenario_cfg = settings["scenario"]
-        scenario_name = scenario_cfg.get("name", "SCENARIO")
-        key_mode = scenario_cfg.get("key_mode", "client")
-        include_tb_scenario = scenario_cfg.get("include_tb", False)
-        manager_assignment = scenario_cfg.get("manager_assignment", "latest")
-        key_columns = build_scenario_keys(key_mode, include_tb_scenario)
-
-        log_info(
-            logger,
-            f"Сценарий {scenario_name}: key_mode={key_mode}, include_tb={include_tb_scenario}, "
-            f"manager_assignment={manager_assignment}",
-        )
-
-        scenario_dataset = assemble_variant_dataset(
-            variant_name=scenario_name,
-            key_columns=key_columns,
-            current_df=current_df,
-            previous_df=previous_df,
-            defaults=defaults,
-            identifiers=identifiers,
-            logger=logger,
-        )
-
-        assignment_df = build_assignment_table(
-            scenario_dataset,
-            key_columns=key_columns,
-            manager_assignment=manager_assignment,
-            defaults=defaults,
-            identifiers=identifiers,
-            logger=logger,
-            scenario_name=scenario_name,
-            manager_tb_mapping=manager_tb_mapping,
-        )
-
-        detail_table = rename_output_columns(assignment_df, alias_to_source)
-        summary_table = build_assignment_summary(
-            assignment_df,
-            include_tb=include_tb_scenario,
-            logger=logger,
-            summary_name=f"{scenario_name}_SUMMARY",
-            manager_tb_mapping=manager_tb_mapping,
-        )
-        percentile_table = append_percentile_columns(
-            summary_table,
-            value_column="Прирост",
-            tb_column="ТБ" if include_tb_scenario else None,
-        )
-
-        detail_sheet_name = scenario_cfg.get("detail_sheet_name", "DETAIL_SCENARIO")
-        summary_sheet_name = scenario_cfg.get("summary_sheet_name", "SUMMARY_TN")
-        percentile_sheet_name = scenario_cfg.get("percentile_sheet_name", "PERCENTILE_TN")
-
-        table_registry: Dict[str, pd.DataFrame] = {
-            "scenario_assignment": assignment_df,
-            "scenario_detail": detail_table,
-            "scenario_summary": summary_table,
-            "scenario_percentile": percentile_table,
-        }
-        raw_tables = {
-            "RAW_T0": format_raw_sheet(current_df, alias_to_source),
-            "RAW_T1": format_raw_sheet(previous_df, alias_to_source),
-        }
-
-        def resolve_table(source_type: str, source_name: Any) -> pd.DataFrame:
-            if source_type in table_registry:
-                return table_registry[source_type]
-            if source_type == "raw":
-                if source_name not in raw_tables:
-                    raise KeyError(f"Недоступный raw-источник '{source_name}'")
-                return raw_tables[source_name]
-            raise ValueError(
-                "Недопустимый source_type. Доступные значения: "
-                "scenario_assignment, scenario_detail, scenario_summary, "
-                "scenario_percentile, raw."
-            )
-
-        if not spod_variants_config:
-            raise ValueError(
-                "В настройках отсутствуют spod_variants. Добавьте хотя бы один сценарий."
-            )
-
-        spod_dataset_tables: Dict[str, pd.DataFrame] = {}
-        csv_frames: List[pd.DataFrame] = []
-        calc_sheets_to_write: List[Dict[str, Any]] = []
-        spod_sheet_names: Dict[str, str] = {}
-
-        for spod_cfg in spod_variants_config:
-            source_type = spod_cfg.get("source_type", "scenario_summary")
-            source_name = spod_cfg.get("source_name")
-            source_table = resolve_table(source_type, source_name)
-            value_column = spod_cfg.get("value_column", "Прирост")
-            dataset = build_spod_dataset(
-                source_table,
-                value_column=value_column,
-                fact_value_filter=spod_cfg.get("fact_value_filter", "all"),
-                plan_value=spod_cfg.get("plan_value", 0.0),
-                priority=spod_cfg.get("priority", "1"),
-                contest_code=spod_cfg["contest_code"],
-                tournament_code=spod_cfg["tournament_code"],
-                contest_date=spod_cfg["contest_date"],
-                identifiers=identifiers,
-                logger=logger,
-                dataset_name=spod_cfg["name"],
-            )
-            spod_dataset_tables[spod_cfg["name"]] = dataset
-            spod_sheet_names[spod_cfg["name"]] = spod_cfg.get(
-                "spod_sheet_name", spod_cfg["name"]
-            )
-            if spod_cfg.get("include_in_csv"):
-                csv_frames.append(dataset)
-            calc_sheet_name = spod_cfg.get("calc_sheet_name")
-            if calc_sheet_name:
-                calc_sheets_to_write.append(
-                    {
-                        "sheet_name": calc_sheet_name,
-                        "table": source_table,
-                        "owner": spod_cfg["name"],
-                    }
+        
+        # Загружаем T-2, если указан
+        previous2_df = None
+        if use_t2:
+            previous2_file = input_dir / previous2_meta["file_name"]
+            if previous2_file.exists():
+                previous2_columns = get_file_columns(file_section, "previous2")
+                previous2_filters = get_file_filters(file_section, "previous2")
+                previous2_drop_rules = build_drop_rules(previous2_filters.get("drop_rules", []))
+                previous2_df = data_loader.read_source_file(
+                    previous2_file,
+                    resolve_sheet_name(file_section, "previous2"),
+                    previous2_columns,
+                    previous2_drop_rules,
                 )
+                log_info(logger, f"Загружен файл T-2: {previous2_meta['file_name']}")
+            else:
+                log_info(logger, f"Файл T-2 не найден: {previous2_meta['file_name']}, используется логика с 2 файлами")
+                use_t2 = False
+
+        # Рассчитываем 3 варианта
+        variant_1_summary = calculate_variant_1(
+            current_df, previous_df, previous2_df if use_t2 else None,
+            defaults, identifiers, logger
+        )
+        variant_2_summary = calculate_variant_2(
+            current_df, previous_df, previous2_df if use_t2 else None,
+            defaults, identifiers, logger
+        )
+        variant_3_summary = calculate_variant_3(
+            current_df, previous_df, previous2_df if use_t2 else None,
+            defaults, identifiers, logger
+        )
+        
+        # Инициализируем калькулятор процентилей
+        percentile_calc = PercentileCalculator()
+        
+        # Добавляем процентили для всех вариантов
+        variant_1_percentile = percentile_calc.append_percentile_columns(
+            variant_1_summary,
+            value_column="Прирост",
+            tb_column=None,  # Вариант 1 без ТБ
+        )
+        variant_2_percentile = percentile_calc.append_percentile_columns(
+            variant_2_summary,
+            value_column="Прирост",
+            tb_column=None,  # Вариант 2 без ТБ
+        )
+        variant_3_percentile = percentile_calc.append_percentile_columns(
+            variant_3_summary,
+            value_column="Прирост",
+            tb_column="ТБ",  # Вариант 3 с ТБ
+        )
+        
+        # Получаем имена листов из конфигурации
+        variant_1_cfg = variants_config.get("variant_1", {})
+        variant_2_cfg = variants_config.get("variant_2", {})
+        variant_3_cfg = variants_config.get("variant_3", {})
+        
+        summary_v1_sheet = variant_1_cfg.get("summary_sheet_name", "SUMMARY_V1")
+        percentile_v1_sheet = variant_1_cfg.get("percentile_sheet_name", "PERCENTILE_V1")
+        summary_v2_sheet = variant_2_cfg.get("summary_sheet_name", "SUMMARY_V2")
+        percentile_v2_sheet = variant_2_cfg.get("percentile_sheet_name", "PERCENTILE_V2")
+        summary_v3_sheet = variant_3_cfg.get("summary_sheet_name", "SUMMARY_V3")
+        percentile_v3_sheet = variant_3_cfg.get("percentile_sheet_name", "PERCENTILE_V3")
+        
+        # Подготавливаем таблицы для вывода
+        raw_tables = {
+            "RAW_T0": format_raw_sheet(current_df, current_alias_to_source),
+            "RAW_T1": format_raw_sheet(previous_df, previous_alias_to_source),
+        }
+        if use_t2 and previous2_df is not None:
+            previous2_column_profiles = build_column_profiles(get_file_columns(file_section, "previous2"))
+            previous2_alias_to_source = previous2_column_profiles["alias_to_source"]
+            raw_tables["RAW_T2"] = format_raw_sheet(previous2_df, previous2_alias_to_source)
+
 
         report_suffix = timestamp_suffix()
         excel_name = f"{spod_config['file_prefix']}{report_suffix}.xlsx"
@@ -1677,62 +2671,48 @@ def process_project(project_root: Path) -> None:
             "Используется движок openpyxl (доступен в базовой поставке Anaconda) для сохранения отчёта.",
         )
 
+        # Инициализируем экспортер Excel
+        excel_exporter = ExcelExporter()
+        
         with pd.ExcelWriter(excel_path, engine="openpyxl") as writer:
             written_sheets: Set[str] = set()
 
             def write_sheet(sheet_name: str, table: pd.DataFrame) -> None:
+                """Внутренняя функция для записи листа с проверкой дубликатов."""
                 if sheet_name in written_sheets:
                     log_debug(
                         logger,
                         f"Лист {sheet_name} уже создан — пропускаю повторную запись",
-                        class_name="Exporter",
+                        class_name="ProjectProcessor",
                         func_name="process_project",
                     )
                     return
-                table.to_excel(writer, sheet_name=sheet_name, index=False)
-                format_excel_sheet(writer, sheet_name, table)
-                written_sheets.add(sheet_name)
+                excel_exporter.write_sheet(writer, sheet_name, table, written_sheets)
 
-            if should_write(detail_sheet_name, detail_sheet_whitelist, "detail_sheets"):
-                write_sheet(detail_sheet_name, detail_table)
+            # Записываем варианты 1-3 (summary и percentile)
+            if should_write(summary_v1_sheet, summary_sheet_whitelist, "summary_sheets"):
+                write_sheet(summary_v1_sheet, variant_1_summary)
+            
+            if should_write(percentile_v1_sheet, percentile_sheet_whitelist, "percentile_sheets"):
+                write_sheet(percentile_v1_sheet, variant_1_percentile)
+            
+            if should_write(summary_v2_sheet, summary_sheet_whitelist, "summary_sheets"):
+                write_sheet(summary_v2_sheet, variant_2_summary)
+            
+            if should_write(percentile_v2_sheet, percentile_sheet_whitelist, "percentile_sheets"):
+                write_sheet(percentile_v2_sheet, variant_2_percentile)
+            
+            if should_write(summary_v3_sheet, summary_sheet_whitelist, "summary_sheets"):
+                write_sheet(summary_v3_sheet, variant_3_summary)
+            
+            if should_write(percentile_v3_sheet, percentile_sheet_whitelist, "percentile_sheets"):
+                write_sheet(percentile_v3_sheet, variant_3_percentile)
 
-            if should_write(summary_sheet_name, summary_sheet_whitelist, "summary_sheets"):
-                write_sheet(summary_sheet_name, summary_table)
-
-            if should_write(percentile_sheet_name, percentile_sheet_whitelist, "percentile_sheets"):
-                write_sheet(percentile_sheet_name, percentile_table)
-
-            for calc_meta in calc_sheets_to_write:
-                owner_name = calc_meta["owner"]
-                if not should_write(owner_name, spod_variant_whitelist, "spod_variants"):
-                    continue
-                sheet_name = calc_meta["sheet_name"]
-                if not should_write(sheet_name, calc_sheet_whitelist, "calc_sheets"):
-                    continue
-                write_sheet(sheet_name, calc_meta["table"])
-
-            for spod_name, dataset in spod_dataset_tables.items():
-                if not should_write(spod_name, spod_variant_whitelist, "spod_variants"):
-                    continue
-                sheet_name = spod_sheet_names.get(spod_name, spod_name)
-                write_sheet(sheet_name, dataset)
-
+            # Записываем raw таблицы
             for sheet_name, raw_table in raw_tables.items():
                 if not should_write(sheet_name, raw_sheet_whitelist, "raw_sheets"):
                     continue
                 write_sheet(sheet_name, raw_table)
-
-        csv_name = f"{spod_config['file_prefix']}_SPOD{report_suffix}.csv"
-        csv_path = output_dir / csv_name
-        if csv_frames:
-            log_info(logger, f"Сохраняю CSV-файл {csv_name}")
-            csv_dataset = pd.concat(csv_frames, ignore_index=True)
-            csv_dataset.to_csv(csv_path, index=False, sep=";", quoting=csv.QUOTE_MINIMAL)
-        else:
-            log_info(
-                logger,
-                "CSV-файл SPOD не сформирован: нет вариантов с include_in_csv=True",
-            )
 
         log_info(logger, "Обработка успешно завершена")
     except Exception as exc:
