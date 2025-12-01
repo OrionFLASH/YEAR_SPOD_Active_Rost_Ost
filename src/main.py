@@ -97,7 +97,7 @@ def build_settings_tree() -> SettingsTree:
                 {
                     "key": "previous2",        # фиксированный ключ T-2.
                     "label": "T-2",
-                    "file_name": "2025_M-8_DIF.xlsx",  # Если пустое "", используется логика с 2 файлами
+                    "file_name": "",  # Если пустое "", используется логика с 2 файлами
                     "sheet": "Sheet1",
                     # Колонки для этого файла (если не указаны, используются общие из "columns" ниже)
                     "columns": [
@@ -160,8 +160,42 @@ def build_settings_tree() -> SettingsTree:
             # Глобальные параметры имени файлов/логов.
             "file_prefix": "YEAR_SPOD_Active_Rost_ost",
             "log_topic": "spod",
+            # Параметр для расчета процентилей (фильтр данных при расчете)
+            "percentile_filter": ">=0",  # Фильтр для расчета процентилей (">=0" - только неотрицательные, "all" - все)
+            # Варианты выгрузки СПОД
+            "variants": [
+                {
+                    "name": "SPOD_SCENARIO",
+                    "calc_sheet_name": "CALC_SCENARIO",
+                    "source_type": "scenario_summary",  # Использует SUMMARY_TN
+                    "value_column": "Прирост",
+                    "fact_value_filter": ">0",  # Фильтр для вывода в SPOD (только положительные приросты)
+                    "plan_value": 0.0,
+                    "priority": 1,
+                    "contest_code": "YEAR_SPOD",
+                    "tournament_code": "ACTIVE_ROST_OST",
+                    "contest_date": "01/01/2025",
+                    "include_in_csv": True,
+                },
+                {
+                    "name": "SPOD_SCENARIO_PERCENTILE",
+                    "calc_sheet_name": "CALC_SCENARIO_PERC",
+                    "source_type": "scenario_percentile",  # Использует PERCENTILE_TN
+                    "value_column": "Обогнал_всего_%",
+                    "fact_value_filter": ">=0",  # Фильтр для вывода в SPOD (все неотрицательные процентили)
+                    "plan_value": 0.0,
+                    "priority": 1,
+                    "contest_code": "YEAR_SPOD_P",
+                    "tournament_code": "ACTIVE_ROST_OST_P",
+                    "contest_date": "01/01/2025",
+                    "include_in_csv": True,
+                },
+            ],
         },
         "variants": {
+            # Выбор активного варианта для расчета (variant_1, variant_2 или variant_3)
+            # Только выбранный вариант будет рассчитан и записан в Excel
+            "active_variant": "variant_2",  # По умолчанию вариант 3 (с ТБ)
             # Три варианта расчета прироста:
             # 1. По КМ (manager_id), без учета ТБ - суммируем в каждом файле по КМ, затем разница
             # 2. По ИНН (client_id), КМ определяется на конец (T-0 → T-1 → T-2), без ТБ
@@ -190,8 +224,11 @@ def build_settings_tree() -> SettingsTree:
         },
         "report_layout": {
             # Управляет тем, какие листы попадают в основной Excel (пустой список = блок отключён).
-            "summary_sheets": ["SUMMARY_V1", "SUMMARY_V2", "SUMMARY_V3"],
-            "percentile_sheets": ["PERCENTILE_V1", "PERCENTILE_V2", "PERCENTILE_V3"],
+            # По умолчанию записываются SUMMARY_TN (объединенный с процентилями) и SUMMARY_INN (для вариантов 2 и 3)
+            "summary_sheets": ["SUMMARY_TN", "SUMMARY_INN"],
+            "percentile_sheets": [],  # Процентили теперь в SUMMARY_TN
+            "calc_sheets": ["CALC_SCENARIO", "CALC_SCENARIO_PERC"],
+            "spod_variants": ["SPOD_SCENARIO", "SPOD_SCENARIO_PERCENTILE"],
             # raw_sheets — очищенные исходники T-0/T-1/T-2.
             "raw_sheets": ["RAW_T0", "RAW_T1", "RAW_T2"],
         },
@@ -577,6 +614,155 @@ def build_manager_tb_mapping(
     # Если у одного менеджера несколько ТБ, берём первое (можно изменить логику на most_common)
     mapping = combined.groupby("manager_id")["tb"].first()
     return mapping
+
+
+def build_manager_gosb_mapping(
+    current_df: pd.DataFrame,
+    previous_df: pd.DataFrame,
+) -> pd.Series:
+    """Строит словарь соответствия табельного номера менеджера и ГОСБ из исходных данных."""
+    
+    # Объединяем оба датафрейма для получения всех соответствий
+    combined = pd.concat([
+        current_df[["manager_id", "gosb"]].drop_duplicates(),
+        previous_df[["manager_id", "gosb"]].drop_duplicates()
+    ]).drop_duplicates()
+    
+    # Если у одного менеджера несколько ГОСБ, берём первое
+    mapping = combined.groupby("manager_id")["gosb"].first()
+    return mapping
+
+
+def build_client_summary_by_inn(
+    variant_df: pd.DataFrame,
+    current_df: pd.DataFrame,
+    previous_df: pd.DataFrame,
+    previous2_df: Optional[pd.DataFrame],
+    manager_tb_mapping: pd.Series,
+    manager_gosb_mapping: pd.Series,
+    defaults: Mapping[str, Any],
+    identifiers: Mapping[str, Any],
+    logger: Mapping[str, Any],
+) -> pd.DataFrame:
+    """Строит свод по ИНН с детальной информацией по клиентам.
+    
+    Для каждого клиента показывает:
+    - ИНН
+    - Кол-во разных ТН в T-0, T-1, T-2
+    - Какой ТН был выбран в каждом файле
+    - Итоговый ТН с ФИО и ТБ
+    
+    Args:
+        variant_df: DataFrame с данными варианта (до агрегации)
+        current_df: DataFrame с данными T-0
+        previous_df: DataFrame с данными T-1
+        previous2_df: DataFrame с данными T-2 (может быть None)
+        manager_tb_mapping: Маппинг табельного номера на ТБ
+        manager_gosb_mapping: Маппинг табельного номера на ГОСБ
+        defaults: Настройки по умолчанию
+        identifiers: Настройки форматирования идентификаторов
+        logger: Логгер для записи сообщений
+    
+    Returns:
+        DataFrame с колонками: ИНН, Кол-во ТН_T0, ТН_T0, Кол-во ТН_T1, ТН_T1, 
+        Кол-во ТН_T2 (если есть), ТН_T2 (если есть), 
+        Итоговый ТН, ФИО КМ, ТБ
+    """
+    log_debug(
+        logger,
+        "Строю свод по ИНН",
+        class_name="Aggregator",
+        func_name="build_client_summary_by_inn",
+    )
+    
+    # Определяем колонку клиента
+    client_col = "client_id" if "client_id" in variant_df.columns else variant_df.columns[0]
+    
+    # Подсчитываем количество разных ТН для каждого клиента в каждом файле
+    def count_unique_managers(df: pd.DataFrame, client_col: str, suffix: str) -> pd.Series:
+        """Подсчитывает количество уникальных ТН для каждого клиента."""
+        if df.empty:
+            return pd.Series(dtype=int, name=f"Кол-во ТН_{suffix}")
+        return df.groupby(client_col)["manager_id"].nunique()
+    
+    # Подсчитываем для каждого файла
+    count_t0_series = count_unique_managers(current_df, client_col, "T0")
+    count_t1_series = count_unique_managers(previous_df, client_col, "T1")
+    
+    # Начинаем с variant_df и добавляем колонки
+    result = variant_df[[client_col]].drop_duplicates().copy()
+    
+    # Добавляем количество ТН
+    result = result.set_index(client_col)
+    result["Кол-во ТН_T0"] = count_t0_series
+    result["Кол-во ТН_T1"] = count_t1_series
+    if previous2_df is not None and not previous2_df.empty:
+        count_t2_series = count_unique_managers(previous2_df, client_col, "T2")
+        result["Кол-во ТН_T2"] = count_t2_series
+    result = result.reset_index()
+    
+    # Добавляем выбранные ТН из variant_df (без ФИО и ТБ для промежуточных)
+    if "Таб. номер ВКО_T0" in variant_df.columns:
+        tn_t0 = variant_df[[client_col, "Таб. номер ВКО_T0"]].drop_duplicates()
+        result = result.merge(tn_t0, on=client_col, how="left")
+        result = result.rename(columns={"Таб. номер ВКО_T0": "ТН_T0"})
+    
+    if "Таб. номер ВКО_T1" in variant_df.columns:
+        tn_t1 = variant_df[[client_col, "Таб. номер ВКО_T1"]].drop_duplicates()
+        result = result.merge(tn_t1, on=client_col, how="left")
+        result = result.rename(columns={"Таб. номер ВКО_T1": "ТН_T1"})
+    
+    if previous2_df is not None and "Таб. номер ВКО_T2" in variant_df.columns:
+        tn_t2 = variant_df[[client_col, "Таб. номер ВКО_T2"]].drop_duplicates()
+        result = result.merge(tn_t2, on=client_col, how="left")
+        result = result.rename(columns={"Таб. номер ВКО_T2": "ТН_T2"})
+    
+    # Добавляем итоговый ТН с ФИО и ТБ
+    if "Таб. номер ВКО_Актуальный" in variant_df.columns:
+        final_tn = variant_df[[client_col, "Таб. номер ВКО_Актуальный", "ВКО_Актуальный"]].drop_duplicates()
+        result = result.merge(final_tn, on=client_col, how="left")
+        
+        # Добавляем ТБ для итогового ТН
+        result["ТБ"] = result["Таб. номер ВКО_Актуальный"].map(manager_tb_mapping).fillna("")
+    
+    # Переименовываем колонки для читаемости
+    rename_map = {
+        client_col: "ИНН",
+        "Таб. номер ВКО_Актуальный": "Итоговый ТН",
+        "ВКО_Актуальный": "ФИО КМ",
+    }
+    result = result.rename(columns=rename_map)
+    
+    # Заполняем пропуски в числовых колонках
+    for col in ["Кол-во ТН_T0", "Кол-во ТН_T1"]:
+        if col in result.columns:
+            result[col] = result[col].fillna(0).astype(int)
+    if "Кол-во ТН_T2" in result.columns:
+        result["Кол-во ТН_T2"] = result["Кол-во ТН_T2"].fillna(0).astype(int)
+    
+    # Переупорядочиваем колонки
+    base_cols = ["ИНН"]
+    if "Кол-во ТН_T0" in result.columns:
+        base_cols.extend(["Кол-во ТН_T0", "ТН_T0"])
+    if "Кол-во ТН_T1" in result.columns:
+        base_cols.extend(["Кол-во ТН_T1", "ТН_T1"])
+    if "Кол-во ТН_T2" in result.columns:
+        base_cols.extend(["Кол-во ТН_T2", "ТН_T2"])
+    base_cols.extend(["Итоговый ТН", "ФИО КМ", "ТБ"])
+    
+    # Оставляем только существующие колонки
+    existing_cols = [col for col in base_cols if col in result.columns]
+    other_cols = [col for col in result.columns if col not in existing_cols]
+    result = result[existing_cols + other_cols]
+    
+    log_debug(
+        logger,
+        f"Свод по ИНН: подготовлено {len(result)} строк",
+        class_name="Aggregator",
+        func_name="build_client_summary_by_inn",
+    )
+    
+    return result
 
 
 def build_assignment_summary(
@@ -1430,24 +1616,27 @@ class PercentileCalculator:
         *,
         value_column: str,
         tb_column: Optional[str] = None,
+        percentile_filter: str = "all",
     ) -> pd.DataFrame:
         """Добавляет в таблицу колонки процентных рангов и абсолютных значений.
         
         Добавляет следующие колонки:
         - Обогнал_всего_%: процент КМ с меньшим результатом (всего)
         - Обогнали_меня_всего_%: процент КМ с большим результатом (всего)
-        - Обогнал_всего_≥0_%: то же самое, но только для значений >= 0
-        - Обогнал_ТерБанк_%: процент КМ с меньшим результатом (в рамках ТБ)
-        - Обогнали_меня_ТерБанк_%: процент КМ с большим результатом (в рамках ТБ)
-        - Обогнал_ТерБанк_≥0_%: то же самое, но только для значений >= 0
-        - Аналогичные колонки с суффиксом _кол для абсолютных значений
-        - Равных_всего_кол, Равных_ТерБанк_кол: количество КМ с таким же результатом
-        - Всего_КМ_всего, Всего_КМ_ТерБанк: общее количество КМ для расчета
+        - Обогнал_всего_кол: количество КМ с меньшим результатом
+        - Обогнали_меня_всего_кол: количество КМ с большим результатом
+        - Равных_всего_кол: количество КМ с таким же результатом
+        - Всего_КМ_всего: общее количество КМ для расчета
+        
+        Расчет выполняется по данным выбранного варианта (с ТБ или без ТБ).
+        Данные для расчета могут быть отфильтрованы по percentile_filter.
         
         Args:
             table: DataFrame с данными для расчета процентилей
             value_column: Имя колонки со значениями для расчета (например, "Прирост")
-            tb_column: Имя колонки с ТБ для группировки (например, "ТБ"). Если None, расчеты по ТБ не выполняются
+            tb_column: Имя колонки с ТБ для группировки (например, "ТБ"). 
+                       Если None, расчеты по ТБ не выполняются (используется вариант без ТБ)
+            percentile_filter: Фильтр для данных при расчете процентилей ("all", ">=0", ">0" и т.д.)
         
         Returns:
             DataFrame с добавленными колонками процентилей
@@ -1462,104 +1651,46 @@ class PercentileCalculator:
 
         prepared = table.copy()
         values = pd.to_numeric(prepared[value_column], errors="coerce").fillna(0.0)
-
-        obognal_all, obognali_all, count_less_all, count_greater_all, count_equal_all, total_all = _compute_percentile_pair(values)
-        prepared["Обогнал_всего_%"] = obognal_all
-        prepared["Обогнали_меня_всего_%"] = obognali_all
-        prepared["Обогнал_всего_кол"] = count_less_all
-        prepared["Обогнали_меня_всего_кол"] = count_greater_all
-        prepared["Равных_всего_кол"] = count_equal_all
-        prepared["Всего_КМ_всего"] = total_all
-
-        mask_non_negative = values >= 0
-        if mask_non_negative.any():
-            obognal_ge0, obognali_ge0, count_less_ge0, count_greater_ge0, count_equal_ge0, total_ge0 = _compute_percentile_pair(values[mask_non_negative])
-            prepared["Обогнал_всего_≥0_%"] = obognal_ge0.reindex(
-                prepared.index, fill_value=0.0
-            )
-            prepared["Обогнали_меня_всего_≥0_%"] = obognali_ge0.reindex(
-                prepared.index, fill_value=0.0
-            )
-            prepared["Обогнал_всего_≥0_кол"] = count_less_ge0.reindex(
-                prepared.index, fill_value=0.0
-            )
-            prepared["Обогнали_меня_всего_≥0_кол"] = count_greater_ge0.reindex(
-                prepared.index, fill_value=0.0
-            )
-            prepared["Равных_всего_≥0_кол"] = count_equal_ge0.reindex(
-                prepared.index, fill_value=0.0
-            )
-            prepared["Всего_КМ_всего_≥0"] = total_ge0.reindex(
-                prepared.index, fill_value=0.0
-            )
+        
+        # Применяем фильтр для расчета процентилей
+        if percentile_filter and percentile_filter.lower() not in ("all", "все"):
+            filter_mask = build_filter_mask(values, percentile_filter)
+            filtered_indices = values[filter_mask].index
         else:
-            prepared["Обогнал_всего_≥0_%"] = 0.0
-            prepared["Обогнали_меня_всего_≥0_%"] = 0.0
-            prepared["Обогнал_всего_≥0_кол"] = 0.0
-            prepared["Обогнали_меня_всего_≥0_кол"] = 0.0
-            prepared["Равных_всего_≥0_кол"] = 0.0
-            prepared["Всего_КМ_всего_≥0"] = 0.0
-
-        tb_column_present = tb_column and tb_column in prepared.columns
-        tb_columns = [
-            "Обогнал_ТерБанк_%",
-            "Обогнали_меня_ТерБанк_%",
-            "Обогнал_ТерБанк_≥0_%",
-            "Обогнали_меня_ТерБанк_≥0_%",
-        ]
-        tb_count_columns = [
-            "Обогнал_ТерБанк_кол",
-            "Обогнали_меня_ТерБанк_кол",
-            "Равных_ТерБанк_кол",
-            "Всего_КМ_ТерБанк",
-            "Обогнал_ТерБанк_≥0_кол",
-            "Обогнали_меня_ТерБанк_≥0_кол",
-            "Равных_ТерБанк_≥0_кол",
-            "Всего_КМ_ТерБанк_≥0",
-        ]
-        if tb_column_present:
-            for column in tb_columns + tb_count_columns:
-                prepared[column] = 0.0
-
-            for _, group in prepared.groupby(tb_column):
-                subset_values = values.loc[group.index]
-                obognal_tb, obognali_tb, count_less_tb, count_greater_tb, count_equal_tb, total_tb = _compute_percentile_pair(subset_values)
-                prepared.loc[group.index, "Обогнал_ТерБанк_%"] = obognal_tb
-                prepared.loc[group.index, "Обогнали_меня_ТерБанк_%"] = obognali_tb
-                prepared.loc[group.index, "Обогнал_ТерБанк_кол"] = count_less_tb
-                prepared.loc[group.index, "Обогнали_меня_ТерБанк_кол"] = count_greater_tb
-                prepared.loc[group.index, "Равных_ТерБанк_кол"] = count_equal_tb
-                prepared.loc[group.index, "Всего_КМ_ТерБанк"] = total_tb
-
-                tb_mask = subset_values >= 0
-                if tb_mask.any():
-                    obognal_tb_ge0, obognali_tb_ge0, count_less_tb_ge0, count_greater_tb_ge0, count_equal_tb_ge0, total_tb_ge0 = _compute_percentile_pair(
-                        subset_values[tb_mask]
-                    )
-                    idx = subset_values[tb_mask].index
-                    prepared.loc[idx, "Обогнал_ТерБанк_≥0_%"] = obognal_tb_ge0
-                    prepared.loc[idx, "Обогнали_меня_ТерБанк_≥0_%"] = obognali_tb_ge0
-                    prepared.loc[idx, "Обогнал_ТерБанк_≥0_кол"] = count_less_tb_ge0
-                    prepared.loc[idx, "Обогнали_меня_ТерБанк_≥0_кол"] = count_greater_tb_ge0
-                    prepared.loc[idx, "Равных_ТерБанк_≥0_кол"] = count_equal_tb_ge0
-                    prepared.loc[idx, "Всего_КМ_ТерБанк_≥0"] = total_tb_ge0
-        else:
-            for column in tb_columns + tb_count_columns:
-                prepared[column] = 0.0
-
-        percent_columns = [
-            "Обогнал_всего_%",
-            "Обогнали_меня_всего_%",
-            "Обогнал_всего_≥0_%",
-            "Обогнали_меня_всего_≥0_%",
-            "Обогнал_ТерБанк_%",
-            "Обогнали_меня_ТерБанк_%",
-            "Обогнал_ТерБанк_≥0_%",
-            "Обогнали_меня_ТерБанк_≥0_%",
-        ]
-        for column in percent_columns:
-            if column in prepared.columns:
-                prepared[column] = prepared[column].round(2)
+            filter_mask = pd.Series(True, index=values.index)
+            filtered_indices = values.index
+        
+        # Рассчитываем процентили для каждой строки относительно отфильтрованного набора
+        prepared["Обогнал_всего_%"] = 0.0
+        prepared["Обогнали_меня_всего_%"] = 0.0
+        prepared["Обогнал_всего_кол"] = 0
+        prepared["Обогнали_меня_всего_кол"] = 0
+        prepared["Равных_всего_кол"] = 0
+        prepared["Всего_КМ_всего"] = len(filtered_indices)
+        
+        filtered_values = values.loc[filtered_indices]
+        
+        # Для каждой строки рассчитываем процентили относительно отфильтрованного набора
+        for idx in prepared.index:
+            current_value = values.loc[idx]
+            
+            # Если значение не проходит фильтр, процентили = 0
+            if percentile_filter and percentile_filter.lower() not in ("all", "все"):
+                if not filter_mask.loc[idx]:
+                    continue
+            
+            # Считаем процентили для текущего значения относительно отфильтрованного набора
+            less_count = (filtered_values < current_value).sum()
+            greater_count = (filtered_values > current_value).sum()
+            equal_count = (filtered_values == current_value).sum() - 1  # Исключаем саму строку
+            
+            total = len(filtered_values)
+            if total > 1:
+                prepared.loc[idx, "Обогнал_всего_%"] = round((less_count / (total - 1)) * 100, 2)
+                prepared.loc[idx, "Обогнали_меня_всего_%"] = round((greater_count / (total - 1)) * 100, 2)
+            prepared.loc[idx, "Обогнал_всего_кол"] = less_count
+            prepared.loc[idx, "Обогнали_меня_всего_кол"] = greater_count
+            prepared.loc[idx, "Равных_всего_кол"] = max(0, equal_count)
 
         return prepared
 
@@ -1967,7 +2098,7 @@ def build_spod_dataset(
     value_column: str,
     fact_value_filter: str,
     plan_value: float,
-    priority: str,
+    priority: int,
     contest_code: str,
     tournament_code: str,
     contest_date: str,
@@ -2604,51 +2735,179 @@ def process_project(project_root: Path) -> None:
                 log_info(logger, f"Файл T-2 не найден: {previous2_meta['file_name']}, используется логика с 2 файлами")
                 use_t2 = False
 
-        # Рассчитываем 3 варианта
-        variant_1_summary = calculate_variant_1(
-            current_df, previous_df, previous2_df if use_t2 else None,
-            defaults, identifiers, logger
-        )
-        variant_2_summary = calculate_variant_2(
-            current_df, previous_df, previous2_df if use_t2 else None,
-            defaults, identifiers, logger
-        )
-        variant_3_summary = calculate_variant_3(
-            current_df, previous_df, previous2_df if use_t2 else None,
-            defaults, identifiers, logger
-        )
+        # Получаем выбранный активный вариант
+        active_variant_key = variants_config.get("active_variant", "variant_3")
+        active_variant_cfg = variants_config.get(active_variant_key, {})
+        
+        if not active_variant_cfg:
+            raise ValueError(
+                f"Активный вариант '{active_variant_key}' не найден в настройках. "
+                f"Доступные варианты: variant_1, variant_2, variant_3"
+            )
+        
+        log_info(logger, f"Используется активный вариант: {active_variant_key} ({active_variant_cfg.get('name', '')})")
+        
+        # Рассчитываем только выбранный вариант
+        # Также получаем variant_df для вариантов 2 и 3 (для свода по ИНН)
+        variant_df_for_client_summary = None
+        key_mode = active_variant_cfg.get("key_mode", "manager")
+        
+        if active_variant_key == "variant_1":
+            selected_summary = calculate_variant_1(
+                current_df, previous_df, previous2_df if use_t2 else None,
+                defaults, identifiers, logger
+            )
+            include_tb = active_variant_cfg.get("include_tb", False)
+            tb_column = "ТБ" if include_tb else None
+        elif active_variant_key == "variant_2":
+            # Получаем variant_df для свода по ИНН
+            aggregator = Aggregator(defaults, identifiers, logger)
+            variant_df_for_client_summary = aggregator.assemble_variant_dataset_with_t2(
+                variant_name="V2_ИНН_безТБ",
+                key_columns=["client_id"],
+                current_df=current_df,
+                previous_df=previous_df,
+                previous2_df=previous2_df if use_t2 else None,
+            )
+            selected_summary = calculate_variant_2(
+                current_df, previous_df, previous2_df if use_t2 else None,
+                defaults, identifiers, logger
+            )
+            include_tb = active_variant_cfg.get("include_tb", False)
+            tb_column = "ТБ" if include_tb else None
+        elif active_variant_key == "variant_3":
+            # Получаем variant_df для свода по ИНН
+            aggregator = Aggregator(defaults, identifiers, logger)
+            variant_df_for_client_summary = aggregator.assemble_variant_dataset_with_t2(
+                variant_name="V3_ИНН_сТБ",
+                key_columns=["client_id", "tb"],
+                current_df=current_df,
+                previous_df=previous_df,
+                previous2_df=previous2_df if use_t2 else None,
+            )
+            selected_summary = calculate_variant_3(
+                current_df, previous_df, previous2_df if use_t2 else None,
+                defaults, identifiers, logger
+            )
+            include_tb = active_variant_cfg.get("include_tb", True)
+            tb_column = "ТБ" if include_tb else None
+        else:
+            raise ValueError(f"Неизвестный вариант: {active_variant_key}")
         
         # Инициализируем калькулятор процентилей
         percentile_calc = PercentileCalculator()
         
-        # Добавляем процентили для всех вариантов
-        variant_1_percentile = percentile_calc.append_percentile_columns(
-            variant_1_summary,
+        # Добавляем процентили для выбранного варианта
+        # Используем фильтр из настроек SPOD для расчета процентилей
+        percentile_filter = spod_config.get("percentile_filter", "all")
+        selected_percentile = percentile_calc.append_percentile_columns(
+            selected_summary,
             value_column="Прирост",
-            tb_column=None,  # Вариант 1 без ТБ
-        )
-        variant_2_percentile = percentile_calc.append_percentile_columns(
-            variant_2_summary,
-            value_column="Прирост",
-            tb_column=None,  # Вариант 2 без ТБ
-        )
-        variant_3_percentile = percentile_calc.append_percentile_columns(
-            variant_3_summary,
-            value_column="Прирост",
-            tb_column="ТБ",  # Вариант 3 с ТБ
+            tb_column=tb_column,
+            percentile_filter=percentile_filter,
         )
         
-        # Получаем имена листов из конфигурации
-        variant_1_cfg = variants_config.get("variant_1", {})
-        variant_2_cfg = variants_config.get("variant_2", {})
-        variant_3_cfg = variants_config.get("variant_3", {})
+        # Объединяем SUMMARY_TN и PERCENTILE_TN в один лист
+        # Сначала данные по расчету приростов, затем процентили
+        summary_tn_combined = selected_summary.copy()
         
-        summary_v1_sheet = variant_1_cfg.get("summary_sheet_name", "SUMMARY_V1")
-        percentile_v1_sheet = variant_1_cfg.get("percentile_sheet_name", "PERCENTILE_V1")
-        summary_v2_sheet = variant_2_cfg.get("summary_sheet_name", "SUMMARY_V2")
-        percentile_v2_sheet = variant_2_cfg.get("percentile_sheet_name", "PERCENTILE_V2")
-        summary_v3_sheet = variant_3_cfg.get("summary_sheet_name", "SUMMARY_V3")
-        percentile_v3_sheet = variant_3_cfg.get("percentile_sheet_name", "PERCENTILE_V3")
+        # Добавляем ТБ и ГОСБ для каждого табельного номера
+        manager_tb_mapping = build_manager_tb_mapping(current_df, previous_df)
+        manager_gosb_mapping = build_manager_gosb_mapping(current_df, previous_df)
+        
+        # Добавляем ТБ и ГОСБ к summary_tn_combined
+        summary_tn_combined["ТБ"] = summary_tn_combined[SELECTED_MANAGER_ID_COL].map(manager_tb_mapping).fillna("")
+        summary_tn_combined["ГОСБ"] = summary_tn_combined[SELECTED_MANAGER_ID_COL].map(manager_gosb_mapping).fillna("")
+        
+        # Добавляем процентильные колонки
+        percentile_columns = [col for col in selected_percentile.columns if col not in summary_tn_combined.columns]
+        for col in percentile_columns:
+            summary_tn_combined[col] = selected_percentile[col]
+        
+        # Переупорядочиваем колонки: сначала расчеты, потом процентили
+        base_columns = [SELECTED_MANAGER_ID_COL, SELECTED_MANAGER_NAME_COL, "ТБ", "ГОСБ", 
+                       "Факт_T0", "Факт_T1", "Прирост"]
+        if "Количество записей" in summary_tn_combined.columns:
+            base_columns.append("Количество записей")
+        percentile_cols = [col for col in percentile_columns if col not in base_columns]
+        summary_tn_combined = summary_tn_combined[base_columns + percentile_cols]
+        
+        # Для обратной совместимости оставляем старые переменные
+        summary_tn = summary_tn_combined.copy()
+        percentile_tn = summary_tn_combined.copy()  # Теперь это один и тот же датафрейм
+        
+        # Создаём свод по ИНН для вариантов 2 и 3 (где key_mode="client")
+        client_summary_inn = None
+        if key_mode == "client" and variant_df_for_client_summary is not None:
+            client_summary_inn = build_client_summary_by_inn(
+                variant_df=variant_df_for_client_summary,
+                current_df=current_df,
+                previous_df=previous_df,
+                previous2_df=previous2_df if use_t2 else None,
+                manager_tb_mapping=manager_tb_mapping,
+                manager_gosb_mapping=manager_gosb_mapping,
+                defaults=defaults,
+                identifiers=identifiers,
+                logger=logger,
+            )
+            log_info(logger, f"Создан свод по ИНН: {len(client_summary_inn)} клиентов")
+        
+        # Подготавливаем данные для SPOD
+        spod_variants_config = spod_config.get("variants", [])
+        spod_datasets: List[pd.DataFrame] = []
+        csv_frames: List[pd.DataFrame] = []
+        
+        # Создаём маппинги ТБ и ГОСБ для менеджеров (уже созданы выше)
+        
+        # Обрабатываем каждый вариант SPOD
+        for spod_variant in spod_variants_config:
+            variant_name = spod_variant.get("name", "")
+            source_type = spod_variant.get("source_type", "scenario_summary")
+            calc_sheet_name = spod_variant.get("calc_sheet_name", "")
+            
+            # Определяем исходную таблицу
+            if source_type == "scenario_summary":
+                source_table = summary_tn
+            elif source_type == "scenario_percentile":
+                source_table = percentile_tn
+            else:
+                log_debug(
+                    logger,
+                    f"SPOD вариант '{variant_name}': неизвестный source_type '{source_type}', пропускаю",
+                    class_name="ProjectProcessor",
+                    func_name="process_project",
+                )
+                continue
+            
+            # Создаём расчётный лист (calc sheet)
+            if calc_sheet_name and should_write(calc_sheet_name, calc_sheet_whitelist, "calc_sheets"):
+                # Расчётный лист - это копия исходной таблицы
+                pass  # Будет записан позже
+            
+            # Создаём SPOD датасет
+            if should_write(variant_name, spod_variant_whitelist, "spod_variants"):
+                spod_dataset = build_spod_dataset(
+                    source_table=source_table,
+                    value_column=spod_variant.get("value_column", "Прирост"),
+                    fact_value_filter=spod_variant.get("fact_value_filter", ">0"),
+                    plan_value=spod_variant.get("plan_value", 0.0),
+                    priority=spod_variant.get("priority", 1),
+                    contest_code=spod_variant.get("contest_code", ""),
+                    tournament_code=spod_variant.get("tournament_code", ""),
+                    contest_date=spod_variant.get("contest_date", "01/01/2025"),
+                    identifiers=identifiers,
+                    logger=logger,
+                    dataset_name=variant_name,
+                )
+                spod_datasets.append((variant_name, spod_dataset))
+                
+                # Добавляем в CSV, если указано
+                if spod_variant.get("include_in_csv", False):
+                    csv_frames.append(spod_dataset)
+        
+        # Получаем имена листов для выбранного варианта
+        selected_summary_sheet = active_variant_cfg.get("summary_sheet_name", "SUMMARY_TN")
+        selected_percentile_sheet = active_variant_cfg.get("percentile_sheet_name", "PERCENTILE_TN")
         
         # Подготавливаем таблицы для вывода
         raw_tables = {
@@ -2689,30 +2948,62 @@ def process_project(project_root: Path) -> None:
                     return
                 excel_exporter.write_sheet(writer, sheet_name, table, written_sheets)
 
-            # Записываем варианты 1-3 (summary и percentile)
-            if should_write(summary_v1_sheet, summary_sheet_whitelist, "summary_sheets"):
-                write_sheet(summary_v1_sheet, variant_1_summary)
+            # Записываем SUMMARY_TN (объединенный с процентилями)
+            if should_write("SUMMARY_TN", summary_sheet_whitelist, "summary_sheets"):
+                write_sheet("SUMMARY_TN", summary_tn)
             
-            if should_write(percentile_v1_sheet, percentile_sheet_whitelist, "percentile_sheets"):
-                write_sheet(percentile_v1_sheet, variant_1_percentile)
+            # Записываем свод по ИНН для вариантов 2 и 3
+            if client_summary_inn is not None:
+                if should_write("SUMMARY_INN", summary_sheet_whitelist, "summary_sheets"):
+                    write_sheet("SUMMARY_INN", client_summary_inn)
             
-            if should_write(summary_v2_sheet, summary_sheet_whitelist, "summary_sheets"):
-                write_sheet(summary_v2_sheet, variant_2_summary)
+            # Записываем расчётные листы для SPOD
+            for spod_variant in spod_variants_config:
+                calc_sheet_name = spod_variant.get("calc_sheet_name", "")
+                source_type = spod_variant.get("source_type", "scenario_summary")
+                
+                if not calc_sheet_name:
+                    continue
+                
+                if not should_write(calc_sheet_name, calc_sheet_whitelist, "calc_sheets"):
+                    continue
+                
+                # Определяем исходную таблицу
+                if source_type == "scenario_summary":
+                    calc_table = summary_tn
+                elif source_type == "scenario_percentile":
+                    calc_table = percentile_tn
+                else:
+                    continue
+                
+                write_sheet(calc_sheet_name, calc_table)
             
-            if should_write(percentile_v2_sheet, percentile_sheet_whitelist, "percentile_sheets"):
-                write_sheet(percentile_v2_sheet, variant_2_percentile)
-            
-            if should_write(summary_v3_sheet, summary_sheet_whitelist, "summary_sheets"):
-                write_sheet(summary_v3_sheet, variant_3_summary)
-            
-            if should_write(percentile_v3_sheet, percentile_sheet_whitelist, "percentile_sheets"):
-                write_sheet(percentile_v3_sheet, variant_3_percentile)
+            # Записываем SPOD листы
+            for variant_name, spod_dataset in spod_datasets:
+                if should_write(variant_name, spod_variant_whitelist, "spod_variants"):
+                    write_sheet(variant_name, spod_dataset)
 
             # Записываем raw таблицы
             for sheet_name, raw_table in raw_tables.items():
                 if not should_write(sheet_name, raw_sheet_whitelist, "raw_sheets"):
                     continue
                 write_sheet(sheet_name, raw_table)
+        
+        # Создаём CSV файл, если есть данные для выгрузки
+        if csv_frames:
+            csv_name = f"{spod_config['file_prefix']}_SPOD{report_suffix}.csv"
+            csv_path = output_dir / csv_name
+            log_info(logger, f"Сохраняю CSV-файл {csv_name}")
+            
+            combined_csv = pd.concat(csv_frames, ignore_index=True)
+            combined_csv.to_csv(
+                csv_path,
+                sep=";",
+                index=False,
+                quoting=csv.QUOTE_MINIMAL,
+                encoding="utf-8-sig",  # UTF-8 с BOM для корректного отображения в Excel
+            )
+            log_info(logger, f"CSV-файл сохранён: {csv_name} ({len(combined_csv)} строк)")
 
         log_info(logger, "Обработка успешно завершена")
     except Exception as exc:
