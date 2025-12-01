@@ -42,30 +42,31 @@ def build_settings_tree() -> SettingsTree:
             #  - Хотите обрабатывать другие файлы? Меняйте file_name или добавляйте новые записи по аналогии.
             #  - Нужно читать несколько листов? Задайте "sheet": "Имя листа" у соответствующего item.
             #  - Если file_name для T-2 пустое, используется логика с 2 файлами, иначе с 3 файлами.
-            #  - columns и filters можно задать для каждого файла отдельно, иначе используются общие значения.
+            #  - columns и filters.drop_rules можно задать для каждого файла отдельно.
+            #    Если columns или filters.drop_rules - пустые массивы [], используются значения из defaults.
             "items": [
                 {
                     "key": "current",          # фиксированный ключ T-0; лучше не переименовывать.
                     "label": "T-0",            # подпись, которая пойдёт в логи.
                     "file_name": "2025_M-10_DIF.xlsx",
                     "sheet": "Sheet1",
-                    # Колонки для этого файла (если не указаны, используются общие из "columns" ниже)
+                    # Колонки для этого файла (если пустой массив [], используются из defaults.columns)
                     "columns": [
-                        {"alias": "tb", "source": "Короткое ТБ"},
-                        {"alias": "gosb", "source": "Полное ГОСБ"},
-                        {"alias": "manager_name", "source": "ФИО"},
-                        {"alias": "manager_id", "source": "Табельный номер"},
-                        {"alias": "client_id", "source": "ИНН"},
-                        {"alias": "fact_value", "source": "Факт"},
+                        # {"alias": "tb", "source": "Короткое ТБ"},
+                        # {"alias": "gosb", "source": "Полное ГОСБ"},
+                        # {"alias": "manager_name", "source": "ФИО"},
+                        # {"alias": "manager_id", "source": "Табельный номер"},
+                        # {"alias": "client_id", "source": "ИНН"},
+                        # {"alias": "fact_value", "source": "Факт"},
                     ],
-                    # Фильтры для этого файла (если не указаны, используются общие из "filters" ниже)
+                    # Фильтры для этого файла (если drop_rules пустой массив [], используются из defaults.drop_rules)
                     "filters": {
                         "drop_rules": [
-                            {"alias": "manager_name", "values": ["-", "Серая зона"]},
-                            {"alias": "manager_id", "values": ["-", "Green_Zone", "Tech_Sib"]},
-                            {"alias": "client_id", "values": ["Report_id не определен", "0", "000000000000"]},
-                            {"alias": "tb", "values": ["ЦА"]},
-                            {"alias": "gosb", "values": ["9999"]},
+                            # {"alias": "manager_name", "values": ["-", "Серая зона"], "remove_unconditionally": True, "check_by_inn": False, "check_by_tn": False},
+                            # {"alias": "manager_id", "values": ["-", "Green_Zone", "Tech_Sib"], "remove_unconditionally": True, "check_by_inn": False, "check_by_tn": False},
+                            # {"alias": "client_id", "values": ["Report_id не определен", "0", "000000000000"], "remove_unconditionally": True, "check_by_inn": False, "check_by_tn": False},
+                            # {"alias": "tb", "values": ["ЦА"], "remove_unconditionally": True, "check_by_inn": False, "check_by_tn": False},
+                            # {"alias": "gosb", "values": ["9999"], "remove_unconditionally": True, "check_by_inn": False, "check_by_tn": False},
                         ],
                     },
                 },
@@ -74,23 +75,23 @@ def build_settings_tree() -> SettingsTree:
                     "label": "T-1",
                     "file_name": "2025_M-9_DIF.xlsx",
                     "sheet": "Sheet1",
-                    # Колонки для этого файла (если не указаны, используются общие из "columns" ниже)
+                    # Колонки для этого файла (если пустой массив [], используются из defaults.columns)
                     "columns": [
-                        {"alias": "tb", "source": "Короткое ТБ"},
-                        {"alias": "gosb", "source": "Полное ГОСБ"},
-                        {"alias": "manager_name", "source": "ФИО"},
-                        {"alias": "manager_id", "source": "Табельный номер"},
-                        {"alias": "client_id", "source": "ИНН"},
-                        {"alias": "fact_value", "source": "Факт"},
+                        # {"alias": "tb", "source": "Короткое ТБ"},
+                        # {"alias": "gosb", "source": "Полное ГОСБ"},
+                        # {"alias": "manager_name", "source": "ФИО"},
+                        # {"alias": "manager_id", "source": "Табельный номер"},
+                        # {"alias": "client_id", "source": "ИНН"},
+                        # {"alias": "fact_value", "source": "Факт"},
                     ],
-                    # Фильтры для этого файла (если не указаны, используются общие из "filters" ниже)
+                    # Фильтры для этого файла (если drop_rules пустой массив [], используются из defaults.drop_rules)
                     "filters": {
                         "drop_rules": [
-                            {"alias": "manager_name", "values": ["-", "Серая зона"]},
-                            {"alias": "manager_id", "values": ["-", "Green_Zone", "Tech_Sib"]},
-                            {"alias": "client_id", "values": ["Report_id не определен", "0", "000000000000"]},
-                            {"alias": "tb", "values": ["ЦА"]},
-                            {"alias": "gosb", "values": ["9999"]},
+                            # {"alias": "manager_name", "values": ["-", "Серая зона"], "remove_unconditionally": True, "check_by_inn": False, "check_by_tn": False},
+                            # {"alias": "manager_id", "values": ["-", "Green_Zone", "Tech_Sib"], "remove_unconditionally": True, "check_by_inn": False, "check_by_tn": False},
+                            # {"alias": "client_id", "values": ["Report_id не определен", "0", "000000000000"], "remove_unconditionally": True, "check_by_inn": False, "check_by_tn": False},
+                            # {"alias": "tb", "values": ["ЦА"], "remove_unconditionally": True, "check_by_inn": False, "check_by_tn": False},
+                            # {"alias": "gosb", "values": ["9999"], "remove_unconditionally": True, "check_by_inn": False, "check_by_tn": False},
                         ],
                     },
                 },
@@ -99,28 +100,34 @@ def build_settings_tree() -> SettingsTree:
                     "label": "T-2",
                     "file_name": "",  # Если пустое "", используется логика с 2 файлами
                     "sheet": "Sheet1",
-                    # Колонки для этого файла (если не указаны, используются общие из "columns" ниже)
+                    # Колонки для этого файла (если пустой массив [], используются из defaults.columns)
                     "columns": [
-                        {"alias": "tb", "source": "Короткое ТБ"},
-                        {"alias": "gosb", "source": "Полное ГОСБ"},
-                        {"alias": "manager_name", "source": "ФИО"},
-                        {"alias": "manager_id", "source": "Табельный номер"},
-                        {"alias": "client_id", "source": "ИНН"},
-                        {"alias": "fact_value", "source": "Факт"},
+                        # {"alias": "tb", "source": "Короткое ТБ"},
+                        # {"alias": "gosb", "source": "Полное ГОСБ"},
+                        # {"alias": "manager_name", "source": "ФИО"},
+                        # {"alias": "manager_id", "source": "Табельный номер"},
+                        # {"alias": "client_id", "source": "ИНН"},
+                        # {"alias": "fact_value", "source": "Факт"},
                     ],
-                    # Фильтры для этого файла (если не указаны, используются общие из "filters" ниже)
+                    # Фильтры для этого файла (если drop_rules пустой массив [], используются из defaults.drop_rules)
                     "filters": {
                         "drop_rules": [
-                            {"alias": "manager_name", "values": ["-", "Серая зона"]},
-                            {"alias": "manager_id", "values": ["-", "Green_Zone", "Tech_Sib"]},
-                            {"alias": "client_id", "values": ["Report_id не определен", "0", "000000000000"]},
-                            {"alias": "tb", "values": ["ЦА"]},
-                            {"alias": "gosb", "values": ["9999"]},
+                            # {"alias": "manager_name", "values": ["-", "Серая зона"], "remove_unconditionally": True, "check_by_inn": False, "check_by_tn": False},
+                            # {"alias": "manager_id", "values": ["-", "Green_Zone", "Tech_Sib"], "remove_unconditionally": True, "check_by_inn": False, "check_by_tn": False},
+                            # {"alias": "client_id", "values": ["Report_id не определен", "0", "000000000000"], "remove_unconditionally": True, "check_by_inn": False, "check_by_tn": False},
+                            # {"alias": "tb", "values": ["ЦА"], "remove_unconditionally": True, "check_by_inn": False, "check_by_tn": False},
+                            # {"alias": "gosb", "values": ["9999"], "remove_unconditionally": True, "check_by_inn": False, "check_by_tn": False},
                         ],
                     },
                 },
             ],
-            # columns: общие колонки по умолчанию (используются, если не указаны в items)
+        },
+        "defaults": {
+            # Заглушки менеджера, которые попадут в итог, если T-0/T-1 не дали значений.
+            #  - Можно указывать реальные ФИО/табельные номера из справочника (строки).
+            "manager_name": "Не найден КМ",
+            "manager_id": "90000009",
+            # columns: общие колонки по умолчанию (используются, если в items для файла columns пустой массив)
             #  - Чтобы подставить другое поле из Excel, достаточно изменить "source".
             #  - Чтобы добавить ещё колонку, расширьте список и пропишите alias (английское имя) + source (русский заголовок).
             "columns": [
@@ -131,24 +138,77 @@ def build_settings_tree() -> SettingsTree:
                 {"alias": "client_id", "source": "ИНН"},
                 {"alias": "fact_value", "source": "Факт"},
             ],
-        },
-        "filters": {
-            # drop_rules: общие правила фильтрации по умолчанию (используются, если не указаны в items)
+            # drop_rules: общие правила фильтрации по умолчанию (используются, если в items для файла filters.drop_rules пустой массив)
             #  - Можно дополнять массив values новыми маркерами (например, ["-", "N/A", "Удалить"]).
             #  - alias должен совпадать с alias из блока columns.
+            #
+            # ПАРАМЕТРЫ УСЛОВНОГО УДАЛЕНИЯ:
+            #
+            # remove_unconditionally (bool, по умолчанию True):
+            #   - True: удаляем строки с запрещенными значениями (с учетом условий, если они заданы)
+            #   - False: НЕ удаляем строки вообще, правило игнорируется
+            #
+            # check_by_inn (bool, по умолчанию False):
+            #   - True: перед удалением проверяем по ИНН (client_id)
+            #     Если по этому ИНН есть другие строки с НЕзапрещенными значениями в этой колонке - строка НЕ удаляется
+            #     Если по этому ИНН все строки имеют запрещенные значения - строка удаляется
+            #   - False: проверка по ИНН не выполняется
+            #
+            # check_by_tn (bool, по умолчанию False):
+            #   - True: перед удалением проверяем по ТН (manager_id)
+            #     Если по этому ТН есть другие строки с НЕзапрещенными значениями в этой колонке - строка НЕ удаляется
+            #     Если по этому ТН все строки имеют запрещенные значения - строка удаляется
+            #   - False: проверка по ТН не выполняется
+            #
+            # КОМБИНАЦИИ ПАРАМЕТРОВ:
+            #
+            # 1. remove_unconditionally=True, check_by_inn=False, check_by_tn=False:
+            #    → Удаляем ВСЕ строки с запрещенными значениями (старая логика, безусловное удаление)
+            #
+            # 2. remove_unconditionally=True, check_by_inn=True, check_by_tn=False:
+            #    → Удаляем строки с запрещенными значениями, НО:
+            #      - Если по ИНН есть строки с другими (незапрещенными) значениями → строка НЕ удаляется
+            #      - Если по ИНН все строки имеют запрещенные значения → строка удаляется
+            #
+            # 3. remove_unconditionally=True, check_by_inn=False, check_by_tn=True:
+            #    → Удаляем строки с запрещенными значениями, НО:
+            #      - Если по ТН есть строки с другими (незапрещенными) значениями → строка НЕ удаляется
+            #      - Если по ТН все строки имеют запрещенные значения → строка удаляется
+            #
+            # 4. remove_unconditionally=True, check_by_inn=True, check_by_tn=True:
+            #    → Удаляем строки с запрещенными значениями, НО:
+            #      - Если по ИНН ИЛИ по ТН есть строки с другими (незапрещенными) значениями → строка НЕ удаляется (логика ИЛИ)
+            #      - Если и по ИНН, и по ТН все строки имеют запрещенные значения → строка удаляется
+            #
+            # 5. remove_unconditionally=False (любые значения check_by_inn и check_by_tn):
+            #    → Строки НЕ удаляются, правило полностью игнорируется
+            #
+            # ПРИМЕРЫ:
+            #
+            # Пример 1: Удалить все строки с tb="ЦА" безусловно
+            #   {"alias": "tb", "values": ["ЦА"], "remove_unconditionally": True, "check_by_inn": False, "check_by_tn": False}
+            #
+            # Пример 2: Удалить строки с tb="ЦА", но оставить если по ИНН есть другие ТБ
+            #   {"alias": "tb", "values": ["ЦА"], "remove_unconditionally": True, "check_by_inn": True, "check_by_tn": False}
+            #   Если у клиента ИНН=123 есть строки: tb="ЦА" и tb="МСК" → строка с tb="ЦА" НЕ удаляется
+            #   Если у клиента ИНН=456 есть только строки: tb="ЦА" → строка с tb="ЦА" удаляется
+            #
+            # Пример 3: Удалить строки с tb="ЦА", но оставить если по ТН есть другие ТБ
+            #   {"alias": "tb", "values": ["ЦА"], "remove_unconditionally": True, "check_by_inn": False, "check_by_tn": True}
+            #   Если у менеджера ТН=001 есть строки: tb="ЦА" и tb="МСК" → строка с tb="ЦА" НЕ удаляется
+            #   Если у менеджера ТН=002 есть только строки: tb="ЦА" → строка с tb="ЦА" удаляется
+            #
+            # Пример 4: Удалить строки с tb="ЦА", но оставить если по ИНН ИЛИ по ТН есть другие ТБ
+            #   {"alias": "tb", "values": ["ЦА"], "remove_unconditionally": True, "check_by_inn": True, "check_by_tn": True}
+            #   Если по ИНН есть другие ТБ ИЛИ по ТН есть другие ТБ → строка НЕ удаляется
+            #   Если и по ИНН, и по ТН все строки имеют tb="ЦА" → строка удаляется
             "drop_rules": [
-                {"alias": "manager_name", "values": ["-", "Серая зона"]},
-                {"alias": "manager_id", "values": ["-", "Green_Zone", "Tech_Sib"]},
-                {"alias": "client_id", "values": ["Report_id не определен", "0", "000000000000"]},
-                {"alias": "tb", "values": ["ЦА"]},
-                {"alias": "gosb", "values": ["9999"]},
+                {"alias": "manager_name", "values": ["-", "Серая зона"], "remove_unconditionally": True, "check_by_inn": False, "check_by_tn": False},
+                {"alias": "manager_id", "values": ["-", "Green_Zone", "Tech_Sib"], "remove_unconditionally": True, "check_by_inn": False, "check_by_tn": False},
+                {"alias": "client_id", "values": ["Report_id не определен", "0", "000000000000"], "remove_unconditionally": True, "check_by_inn": False, "check_by_tn": False},
+                {"alias": "tb", "values": ["ЦА"], "remove_unconditionally": True, "check_by_inn": False, "check_by_tn": False},
+                {"alias": "gosb", "values": ["9999"], "remove_unconditionally": True, "check_by_inn": False, "check_by_tn": False},
             ],
-        },
-        "defaults": {
-            # Заглушки менеджера, которые попадут в итог, если T-0/T-1 не дали значений.
-            #  - Можно указывать реальные ФИО/табельные номера из справочника (строки).
-            "manager_name": "Не найден КМ",
-            "manager_id": "90000009",
         },
         "identifiers": {
             # Форматирование ID: задаём символ заполнения (fill_char) и итоговую длину.
@@ -181,7 +241,8 @@ def build_settings_tree() -> SettingsTree:
                     "name": "SPOD_SCENARIO_PERCENTILE",
                     "calc_sheet_name": "CALC_SCENARIO_PERC",
                     "source_type": "scenario_percentile",  # Использует PERCENTILE_TN
-                    "value_column": "Обогнал_всего_%",
+                    "value_column": "Обогнал_всего_%",  # Используется для сортировки и фильтрации
+                    "percentile_value_type": "обогнал",  # Тип значения для FACT_VALUE: "обогнал" (Обогнал_всего_%) или "обогнали" (Обогнали_меня_всего_%)
                     "fact_value_filter": ">=0",  # Фильтр для вывода в SPOD (все неотрицательные процентили)
                     "plan_value": 0.0,
                     "priority": 1,
@@ -245,10 +306,31 @@ def build_column_profiles(columns: List[Dict[str, str]]) -> Dict[str, Dict[str, 
     return {"rename_map": rename_map, "alias_to_source": alias_to_source}
 
 
-def build_drop_rules(rule_items: List[Dict[str, Any]]) -> Dict[str, Iterable[str]]:
-    """Возвращает словарь запретных значений по колонкам."""
-
-    return {rule["alias"]: tuple(rule["values"]) for rule in rule_items}
+def build_drop_rules(rule_items: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    """Возвращает словарь правил фильтрации по колонкам.
+    
+    Каждое правило содержит:
+    - values: кортеж запрещенных значений
+    - remove_unconditionally: убирать ли всегда (по умолчанию True)
+    - check_by_inn: проверять ли по ИНН (по умолчанию False)
+    - check_by_tn: проверять ли по ТН (по умолчанию False)
+    
+    Args:
+        rule_items: Список правил из конфигурации
+    
+    Returns:
+        Словарь {alias: {values: tuple, remove_unconditionally: bool, check_by_inn: bool, check_by_tn: bool}}
+    """
+    result = {}
+    for rule in rule_items:
+        alias = rule["alias"]
+        result[alias] = {
+            "values": tuple(rule["values"]),
+            "remove_unconditionally": rule.get("remove_unconditionally", True),
+            "check_by_inn": rule.get("check_by_inn", False),
+            "check_by_tn": rule.get("check_by_tn", False),
+        }
+    return result
 
 
 def get_file_meta(file_section: Dict[str, Any], key: str) -> Dict[str, Any]:
@@ -267,22 +349,48 @@ def resolve_sheet_name(file_section: Dict[str, Any], file_key: str) -> str:
     return meta.get("sheet") or file_section.get("sheet", "Sheet1")
 
 
-def get_file_columns(file_section: Dict[str, Any], file_key: str) -> List[Dict[str, str]]:
-    """Возвращает колонки для конкретного файла (или общие, если не указаны)."""
-
+def get_file_columns(file_section: Dict[str, Any], file_key: str, defaults: Dict[str, Any]) -> List[Dict[str, str]]:
+    """Возвращает колонки для конкретного файла.
+    
+    Логика:
+    - Если в items для файла есть columns и он не пустой (не пустой массив), используется columns из items
+    - Если в items для файла columns отсутствует или это пустой массив, используется columns из defaults
+    
+    Args:
+        file_section: Секция files из настроек
+        file_key: Ключ файла ("current", "previous", "previous2")
+        defaults: Секция defaults из настроек
+    
+    Returns:
+        Список колонок для файла
+    """
     meta = get_file_meta(file_section, file_key)
-    if "columns" in meta:
+    if "columns" in meta and isinstance(meta["columns"], list) and len(meta["columns"]) > 0:
         return meta["columns"]
-    return file_section.get("columns", [])
+    return defaults.get("columns", [])
 
 
-def get_file_filters(file_section: Dict[str, Any], file_key: str) -> Dict[str, Any]:
-    """Возвращает фильтры для конкретного файла (или общие, если не указаны)."""
-
+def get_file_filters(file_section: Dict[str, Any], file_key: str, defaults: Dict[str, Any]) -> Dict[str, Any]:
+    """Возвращает фильтры для конкретного файла.
+    
+    Логика:
+    - Если в items для файла есть filters.drop_rules и он не пустой (не пустой массив), используется drop_rules из items
+    - Если в items для файла filters отсутствует или filters.drop_rules пустой массив, используется drop_rules из defaults
+    
+    Args:
+        file_section: Секция files из настроек
+        file_key: Ключ файла ("current", "previous", "previous2")
+        defaults: Секция defaults из настроек
+    
+    Returns:
+        Словарь с фильтрами для файла
+    """
     meta = get_file_meta(file_section, file_key)
-    if "filters" in meta:
-        return meta["filters"]
-    return file_section.get("filters", {"drop_rules": []})
+    if "filters" in meta and isinstance(meta["filters"], dict):
+        drop_rules = meta["filters"].get("drop_rules", [])
+        if isinstance(drop_rules, list) and len(drop_rules) > 0:
+            return meta["filters"]
+    return {"drop_rules": defaults.get("drop_rules", [])}
 
 
 def parse_contest_date(contest_date: str) -> str:
@@ -968,37 +1076,139 @@ class DataLoader:
     def drop_forbidden_rows(
         self,
         df: pd.DataFrame,
-        drop_rules: Mapping[str, Iterable[str]],
+        drop_rules: Mapping[str, Dict[str, Any]],
     ) -> pd.DataFrame:
-        """Удаляет строки с запрещёнными значениями.
+        """Удаляет строки с запрещёнными значениями с поддержкой условной логики.
         
         Проходит по каждой колонке из drop_rules и удаляет строки, где значение
         (приведенное к нижнему регистру) совпадает с одним из запрещенных.
         
+        Поддерживает условное удаление:
+        - remove_unconditionally: убирать всегда (по умолчанию True)
+        - check_by_inn: если True, не убираем строку, если по этому ИНН есть строки с другими значениями
+        - check_by_tn: если True, не убираем строку, если по этому ТН есть строки с другими значениями
+        - Если оба check_by_inn и check_by_tn True - работает как ИЛИ
+        
         Args:
             df: DataFrame для очистки
-            drop_rules: Словарь {column_alias: tuple(forbidden_values)}
+            drop_rules: Словарь {column_alias: {values: tuple, remove_unconditionally: bool, check_by_inn: bool, check_by_tn: bool}}
         
         Returns:
             DataFrame без запрещенных строк
         """
         cleaned = df.copy()
-        for column, values in drop_rules.items():
+        
+        for column, rule in drop_rules.items():
+            if column not in cleaned.columns:
+                log_debug(
+                    self.logger,
+                    f"Колонка {column} отсутствует в данных, пропускаем правило",
+                    class_name="DataLoader",
+                    func_name="drop_forbidden_rows",
+                )
+                continue
+            
+            values = rule.get("values", ())
+            remove_unconditionally = rule.get("remove_unconditionally", True)
+            check_by_inn = rule.get("check_by_inn", False)
+            check_by_tn = rule.get("check_by_tn", False)
+            
             forbidden = {value.lower() for value in values}
 
-            def is_forbidden(value: Any) -> bool:
+            def is_forbidden_value(value: Any) -> bool:
+                """Проверяет, является ли значение запрещенным."""
                 if value is None:
                     return False
                 return str(value).strip().lower() in forbidden
 
-            before = len(cleaned)
-            cleaned = cleaned[~cleaned[column].apply(is_forbidden)]
-            log_debug(
-                self.logger,
-                f"Колонка {column}: удалено {before - len(cleaned)} строк",
-                class_name="DataLoader",
-                func_name="drop_forbidden_rows",
-            )
+            # Находим строки с запрещенными значениями
+            mask_forbidden = cleaned[column].apply(is_forbidden_value)
+            
+            if not mask_forbidden.any():
+                log_debug(
+                    self.logger,
+                    f"Колонка {column}: запрещенных значений не найдено",
+                    class_name="DataLoader",
+                    func_name="drop_forbidden_rows",
+                )
+                continue
+            
+            if not remove_unconditionally:
+                # Если remove_unconditionally=False, не удаляем строки
+                log_debug(
+                    self.logger,
+                    f"Колонка {column}: remove_unconditionally=False, строки не удаляются",
+                    class_name="DataLoader",
+                    func_name="drop_forbidden_rows",
+                )
+                continue
+            
+            if not check_by_inn and not check_by_tn:
+                # Простое удаление без условий (старая логика)
+                before = len(cleaned)
+                cleaned = cleaned[~mask_forbidden]
+                log_debug(
+                    self.logger,
+                    f"Колонка {column}: удалено {before - len(cleaned)} строк (безусловно)",
+                    class_name="DataLoader",
+                    func_name="drop_forbidden_rows",
+                )
+            else:
+                # Условное удаление: удаляем строки, но если условие выполняется (есть другие значения по ИНН/ТН), не удаляем
+                rows_to_remove = mask_forbidden.copy()
+                
+                # Проверяем условия для каждой строки с запрещенным значением
+                for idx in cleaned[mask_forbidden].index:
+                    row = cleaned.loc[idx]
+                    should_keep = False
+                    
+                    if check_by_inn and "client_id" in cleaned.columns:
+                        # Проверяем, есть ли по этому ИНН строки с другими значениями в этой колонке
+                        client_id = row["client_id"]
+                        if pd.notna(client_id):
+                            other_rows_same_inn = cleaned[
+                                (cleaned["client_id"] == client_id) & 
+                                (cleaned.index != idx)
+                            ]
+                            if len(other_rows_same_inn) > 0:
+                                # Проверяем, есть ли среди них строки с другими значениями в этой колонке
+                                other_values = other_rows_same_inn[column].apply(
+                                    lambda v: not is_forbidden_value(v) if pd.notna(v) else False
+                                )
+                                if other_values.any():
+                                    should_keep = True
+                    
+                    if check_by_tn and "manager_id" in cleaned.columns:
+                        # Проверяем, есть ли по этому ТН строки с другими значениями в этой колонке
+                        manager_id = row["manager_id"]
+                        if pd.notna(manager_id):
+                            other_rows_same_tn = cleaned[
+                                (cleaned["manager_id"] == manager_id) & 
+                                (cleaned.index != idx)
+                            ]
+                            if len(other_rows_same_tn) > 0:
+                                # Проверяем, есть ли среди них строки с другими значениями в этой колонке
+                                other_values = other_rows_same_tn[column].apply(
+                                    lambda v: not is_forbidden_value(v) if pd.notna(v) else False
+                                )
+                                if other_values.any():
+                                    should_keep = True
+                    
+                    # Если хотя бы одно условие выполняется (ИЛИ), не убираем строку
+                    if should_keep:
+                        rows_to_remove.loc[idx] = False
+                
+                before = len(cleaned)
+                cleaned = cleaned[~rows_to_remove]
+                log_debug(
+                    self.logger,
+                    f"Колонка {column}: удалено {before - len(cleaned)} строк "
+                    f"(условно: remove_unconditionally={remove_unconditionally}, "
+                    f"check_by_inn={check_by_inn}, check_by_tn={check_by_tn})",
+                    class_name="DataLoader",
+                    func_name="drop_forbidden_rows",
+                )
+        
         return cleaned
 
 
@@ -2140,12 +2350,37 @@ def build_spod_dataset(
     identifiers: Mapping[str, Any],
     logger: Mapping[str, Any],
     dataset_name: str,
+    percentile_value_column: Optional[str] = None,
 ) -> pd.DataFrame:
-    """Готовит данные для загрузки в СПОД."""
+    """Готовит данные для загрузки в СПОД.
+    
+    Args:
+        source_table: Исходная таблица с данными
+        value_column: Колонка для фильтрации и сортировки
+        fact_value_filter: Фильтр для отбора данных
+        plan_value: Плановое значение
+        priority: Приоритет
+        contest_code: Код конкурса
+        tournament_code: Код турнира
+        contest_date: Дата конкурса
+        identifiers: Настройки форматирования идентификаторов
+        logger: Логгер
+        dataset_name: Имя датасета для логирования
+        percentile_value_column: Колонка для FACT_VALUE (если отличается от value_column).
+                                 Если None, используется value_column.
+    """
 
     if value_column not in source_table.columns:
         raise KeyError(
             f"Колонка '{value_column}' отсутствует в источнике '{dataset_name}'."
+        )
+
+    # Определяем колонку для FACT_VALUE
+    fact_value_column = percentile_value_column if percentile_value_column is not None else value_column
+    
+    if fact_value_column not in source_table.columns:
+        raise KeyError(
+            f"Колонка '{fact_value_column}' для FACT_VALUE отсутствует в источнике '{dataset_name}'."
         )
 
     mask = build_filter_mask(source_table[value_column], fact_value_filter)
@@ -2177,7 +2412,8 @@ def build_spod_dataset(
     dataset["TOURNAMENT_CODE"] = tournament_code
     dataset["CONTEST_DATE"] = parse_contest_date(contest_date)
     dataset["PLAN_VALUE"] = format_decimal_string(plan_value)
-    dataset["FACT_VALUE"] = filtered[value_column].apply(format_decimal_string)
+    # Используем fact_value_column для FACT_VALUE
+    dataset["FACT_VALUE"] = filtered[fact_value_column].apply(format_decimal_string)
     dataset["priority_type"] = priority
 
     log_debug(
@@ -2885,15 +3121,15 @@ def process_project(project_root: Path) -> None:
 
     try:
         # Получаем колонки и фильтры для каждого файла
-        current_columns = get_file_columns(file_section, "current")
-        current_filters = get_file_filters(file_section, "current")
+        current_columns = get_file_columns(file_section, "current", defaults)
+        current_filters = get_file_filters(file_section, "current", defaults)
         current_drop_rules = build_drop_rules(current_filters.get("drop_rules", []))
         current_column_profiles = build_column_profiles(current_columns)
         current_rename_map = current_column_profiles["rename_map"]
         current_alias_to_source = current_column_profiles["alias_to_source"]
         
-        previous_columns = get_file_columns(file_section, "previous")
-        previous_filters = get_file_filters(file_section, "previous")
+        previous_columns = get_file_columns(file_section, "previous", defaults)
+        previous_filters = get_file_filters(file_section, "previous", defaults)
         previous_drop_rules = build_drop_rules(previous_filters.get("drop_rules", []))
         previous_column_profiles = build_column_profiles(previous_columns)
         previous_rename_map = previous_column_profiles["rename_map"]
@@ -2934,8 +3170,8 @@ def process_project(project_root: Path) -> None:
         if use_t2:
             previous2_file = input_dir / previous2_meta["file_name"]
             if previous2_file.exists():
-                previous2_columns = get_file_columns(file_section, "previous2")
-                previous2_filters = get_file_filters(file_section, "previous2")
+                previous2_columns = get_file_columns(file_section, "previous2", defaults)
+                previous2_filters = get_file_filters(file_section, "previous2", defaults)
                 previous2_drop_rules = build_drop_rules(previous2_filters.get("drop_rules", []))
                 previous2_df = data_loader.read_source_file(
                     previous2_file,
@@ -3085,6 +3321,22 @@ def process_project(project_root: Path) -> None:
             
             # Создаём SPOD датасет
             if should_write(variant_name, spod_variant_whitelist, "spod_variants"):
+                # Определяем колонку для FACT_VALUE (для процентильного SPOD может отличаться от value_column)
+                percentile_value_column = None
+                percentile_value_type = spod_variant.get("percentile_value_type")
+                if percentile_value_type:
+                    if percentile_value_type == "обогнал":
+                        percentile_value_column = "Обогнал_всего_%"
+                    elif percentile_value_type == "обогнали":
+                        percentile_value_column = "Обогнали_меня_всего_%"
+                    else:
+                        log_debug(
+                            logger,
+                            f"SPOD '{variant_name}': неизвестный percentile_value_type '{percentile_value_type}', используется value_column",
+                            class_name="ProjectProcessor",
+                            func_name="process_project",
+                        )
+                
                 # Базовый SPOD датасет для CSV
                 spod_dataset = build_spod_dataset(
                     source_table=source_table,
@@ -3098,6 +3350,7 @@ def process_project(project_root: Path) -> None:
                     identifiers=identifiers,
                     logger=logger,
                     dataset_name=variant_name,
+                    percentile_value_column=percentile_value_column,
                 )
                 
                 # Получаем отфильтрованную таблицу для добавления доп данных
@@ -3106,11 +3359,13 @@ def process_project(project_root: Path) -> None:
                 filtered_table = source_table[mask].copy()
                 
                 # Расширенный SPOD датасет для Excel (с дополнительными колонками)
+                # Используем percentile_value_column для колонки "Факт", если она определена
+                fact_column_for_excel = percentile_value_column if percentile_value_column is not None else spod_variant.get("value_column", "Прирост")
                 spod_dataset_excel = build_spod_dataset_for_excel(
                     source_table=source_table,
                     filtered_table=filtered_table,
                     spod_dataset=spod_dataset,
-                    value_column=spod_variant.get("value_column", "Прирост"),
+                    value_column=fact_column_for_excel,  # Используем колонку для FACT_VALUE
                     source_type=source_type,  # Передаем тип источника для определения, нужны ли процентили
                     manager_tb_mapping=manager_tb_mapping,
                     manager_gosb_mapping=manager_gosb_mapping,
@@ -3137,7 +3392,7 @@ def process_project(project_root: Path) -> None:
             "RAW_T1": format_raw_sheet(previous_df, previous_alias_to_source),
         }
         if use_t2 and previous2_df is not None:
-            previous2_column_profiles = build_column_profiles(get_file_columns(file_section, "previous2"))
+            previous2_column_profiles = build_column_profiles(get_file_columns(file_section, "previous2", defaults))
             previous2_alias_to_source = previous2_column_profiles["alias_to_source"]
             raw_tables["RAW_T2"] = format_raw_sheet(previous2_df, previous2_alias_to_source)
 
