@@ -225,7 +225,21 @@ def build_settings_tree() -> SettingsTree:
                 {
                     "name": "SPOD_SCENARIO",
                     "calc_sheet_name": "CALC_SCENARIO",
-                    "source_type": "scenario_summary",  # Использует SUMMARY_TN
+                    # source_type: определяет тип источника данных и влияет на формирование SPOD выгрузки
+                    # Варианты:
+                    #   "scenario_summary" - использует данные из SUMMARY_TN (основной расчет прироста)
+                    #     - FACT_VALUE берется из value_column (обычно "Прирост")
+                    #     - В Excel НЕ добавляются процентильные колонки (Обогнал_всего_кол, Обогнали_меня_всего_кол и т.д.)
+                    #     - percentile_type из варианта процентиля НЕ используется
+                    #     - Используется для выгрузки фактических значений прироста
+                    #   "scenario_percentile" - использует данные из SUMMARY_TN с процентилями (PERCENTILE_TN)
+                    #     - FACT_VALUE берется из percentile_type выбранного варианта процентиля:
+                    #       * если percentile_type="обогнал" → FACT_VALUE = Обогнал_всего_%
+                    #       * если percentile_type="обогнали" → FACT_VALUE = Обогнали_меня_всего_%
+                    #     - В Excel добавляются процентильные колонки: Обогнал_всего_кол, Обогнали_меня_всего_кол, Равных_всего_кол, Всего_КМ_всего
+                    #     - percentile_type берется из variants.active_percentile_variant
+                    #     - Используется для выгрузки процентильных метрик
+                    "source_type": "scenario_summary",
                     "value_column": "Прирост",
                     "fact_value_filter": ">0",  # Фильтр для вывода в SPOD (только положительные приросты)
                     "plan_value": 0.0,
@@ -238,9 +252,23 @@ def build_settings_tree() -> SettingsTree:
                 {
                     "name": "SPOD_SCENARIO_PERCENTILE",
                     "calc_sheet_name": "CALC_SCENARIO_PERC",
-                    "source_type": "scenario_percentile",  # Использует PERCENTILE_TN
-                    "value_column": "Обогнал_всего_%",  # Используется для сортировки и фильтрации
-                    # percentile_value_type берется из percentile_type выбранного варианта процентиля (variants.active_percentile_variant)
+                    # source_type: определяет тип источника данных и влияет на формирование SPOD выгрузки
+                    # Варианты:
+                    #   "scenario_summary" - использует данные из SUMMARY_TN (основной расчет прироста)
+                    #     - FACT_VALUE берется из value_column (обычно "Прирост")
+                    #     - В Excel НЕ добавляются процентильные колонки (Обогнал_всего_кол, Обогнали_меня_всего_кол и т.д.)
+                    #     - percentile_type из варианта процентиля НЕ используется
+                    #     - Используется для выгрузки фактических значений прироста
+                    #   "scenario_percentile" - использует данные из SUMMARY_TN с процентилями (PERCENTILE_TN)
+                    #     - FACT_VALUE берется из percentile_type выбранного варианта процентиля:
+                    #       * если percentile_type="обогнал" → FACT_VALUE = Обогнал_всего_%
+                    #       * если percentile_type="обогнали" → FACT_VALUE = Обогнали_меня_всего_%
+                    #     - В Excel добавляются процентильные колонки: Обогнал_всего_кол, Обогнали_меня_всего_кол, Равных_всего_кол, Всего_КМ_всего
+                    #     - percentile_type берется из variants.active_percentile_variant
+                    #     - Используется для выгрузки процентильных метрик
+                    "source_type": "scenario_percentile",
+                    "value_column": "Обогнал_всего_%",  # Используется для сортировки и фильтрации (НЕ для FACT_VALUE)
+                    # percentile_value_type для FACT_VALUE берется из percentile_type выбранного варианта процентиля (variants.active_percentile_variant)
                     "fact_value_filter": ">=0",  # Фильтр для вывода в SPOD (все неотрицательные процентили)
                     "plan_value": 0.0,
                     "priority": 1,
