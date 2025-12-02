@@ -312,8 +312,8 @@ def build_settings_tree() -> SettingsTree:
             # Параметры форматирования Excel листов
             # column_width: настройки ширины колонок
             "column_width": {
-                "min_width": 20,  # Минимальная ширина колонки в пунктах
-                "max_width": 200,  # Максимальная ширина колонки в пунктах
+                "min_width": 15,  # Минимальная ширина колонки в пунктах
+                "max_width": 150,  # Максимальная ширина колонки в пунктах
                 "auto_fit": True,  # Автоматическая подстройка ширины по содержимому
             },
             # wrap_text: включить перенос текста по строкам для всех ячеек
@@ -323,8 +323,6 @@ def build_settings_tree() -> SettingsTree:
             # Управляет тем, какие листы попадают в основной Excel (пустой список = блок отключён).
             # По умолчанию записываются SUMMARY_TN (объединенный с процентилями) и SUMMARY_INN (для вариантов 2 и 3)
             "summary_sheets": ["SUMMARY_TN", "SUMMARY_INN"],
-            "percentile_sheets": [],  # Процентили теперь в SUMMARY_TN
-            "calc_sheets": [],  # CALC листы больше не создаются
             "spod_variants": ["SPOD_SCENARIO", "SPOD_SCENARIO_PERCENTILE"],
             # raw_sheets — очищенные исходники T-0/T-1/T-2.
             "raw_sheets": ["RAW_T0", "RAW_T1", "RAW_T2"],
@@ -3214,8 +3212,6 @@ def process_project(project_root: Path) -> None:
 
     detail_sheet_whitelist = build_whitelist("detail_sheets")
     summary_sheet_whitelist = build_whitelist("summary_sheets")
-    percentile_sheet_whitelist = build_whitelist("percentile_sheets")
-    calc_sheet_whitelist = build_whitelist("calc_sheets")
     spod_variant_whitelist = build_whitelist("spod_variants")
     raw_sheet_whitelist = build_whitelist("raw_sheets")
 
