@@ -241,7 +241,7 @@ def build_settings_tree() -> SettingsTree:
                     #     - Используется для выгрузки процентильных метрик
                     "source_type": "scenario_summary",
                     "value_column": "Прирост",
-                    "fact_value_filter": ">0",  # Фильтр для вывода в SPOD (только положительные приросты)
+                    "fact_value_filter": "all",  # Фильтр для вывода в SPOD (только положительные приросты)
                     "plan_value": 0.0,
                     "priority": 1,
                     "contest_code": "YEAR_SPOD",
@@ -269,7 +269,7 @@ def build_settings_tree() -> SettingsTree:
                     "source_type": "scenario_percentile",
                     "value_column": "Обогнал_всего_%",  # Используется для сортировки и фильтрации (НЕ для FACT_VALUE)
                     # percentile_value_type для FACT_VALUE берется из percentile_type настроек процентиля (variants.percentile_calculation.percentile_type)
-                    "fact_value_filter": ">=0",  # Фильтр для вывода в SPOD (все неотрицательные процентили)
+                    "fact_value_filter": "all",  # Фильтр для вывода в SPOD (все неотрицательные процентили)
                     "plan_value": 0.0,
                     "priority": 1,
                     "contest_code": "YEAR_SPOD_P",
@@ -306,7 +306,18 @@ def build_settings_tree() -> SettingsTree:
             #   ">=0" - расчет только по неотрицательным значениям
             #   ">0" - расчет только по положительным значениям
             #   "all" - расчет по всем значениям
-            "percentile_filter": ">=0",  # ">=0", ">0", "all" и т.д.
+            "percentile_filter": ">0",  # ">=0", ">0", "all" и т.д.
+        },
+        "excel_formatting": {
+            # Параметры форматирования Excel листов
+            # column_width: настройки ширины колонок
+            "column_width": {
+                "min_width": 20,  # Минимальная ширина колонки в пунктах
+                "max_width": 200,  # Максимальная ширина колонки в пунктах
+                "auto_fit": True,  # Автоматическая подстройка ширины по содержимому
+            },
+            # wrap_text: включить перенос текста по строкам для всех ячеек
+            "wrap_text": True,  # True - включить перенос текста, False - отключить
         },
         "report_layout": {
             # Управляет тем, какие листы попадают в основной Excel (пустой список = блок отключён).
@@ -2016,15 +2027,23 @@ class ExcelExporter:
     """
     
     @staticmethod
-    def format_sheet(writer: pd.ExcelWriter, sheet_name: str, df: pd.DataFrame) -> None:
+    def format_sheet(
+        writer: pd.ExcelWriter, 
+        sheet_name: str, 
+        df: pd.DataFrame,
+        min_width: int = 20,
+        max_width: int = 200,
+        wrap_text: bool = True,
+    ) -> None:
         """Применяет форматирование листа Excel через openpyxl.
         
         Выполняет следующие операции:
         1. Замораживает первую строку (заголовки)
         2. Включает автофильтр
         3. Форматирует заголовки (жирный шрифт, перенос текста)
-        4. Настраивает ширину колонок (70-200 символов)
-        5. Применяет числовые форматы:
+        4. Настраивает ширину колонок автоматически по содержимому (с ограничениями min_width-max_width)
+        5. Включает перенос текста для всех ячеек (если wrap_text=True)
+        6. Применяет числовые форматы:
            - #,##0.00 для процентов и фактов
            - #,##0 для количеств
         
@@ -2032,6 +2051,9 @@ class ExcelExporter:
             writer: ExcelWriter для записи
             sheet_name: Имя листа для форматирования
             df: DataFrame с данными (используется для определения типов колонок)
+            min_width: Минимальная ширина колонки в пунктах (по умолчанию 20)
+            max_width: Максимальная ширина колонки в пунктах (по умолчанию 200)
+            wrap_text: Включить перенос текста по строкам (по умолчанию True)
         """
         workbook = writer.book
         worksheet = workbook[sheet_name]
@@ -2042,22 +2064,35 @@ class ExcelExporter:
         worksheet.freeze_panes = worksheet["A2"]
         worksheet.auto_filter.ref = worksheet.dimensions
 
-        header_alignment = Alignment(wrap_text=True)
-        wrap_alignment = Alignment(wrap_text=True)
-        number_alignment = Alignment(wrap_text=True)
+        # Настройки выравнивания с учетом wrap_text
+        header_alignment = Alignment(wrap_text=wrap_text, vertical="top")
+        wrap_alignment = Alignment(wrap_text=wrap_text, vertical="top")
+        number_alignment = Alignment(wrap_text=wrap_text, vertical="top")
         header_font = Font(bold=True)
 
+        # Форматируем заголовки
         for cell in next(worksheet.iter_rows(min_row=1, max_row=1)):
             cell.font = header_font
             cell.alignment = header_alignment
 
+        # Автоматическая подстройка ширины колонок по содержимому
         for col_idx, column in enumerate(df.columns, start=1):
-            values = [column] + df[column].tolist()
-            max_len = max((len(str(value)) for value in values), default=0) + 2
-            width = clamp_width(max_len)
+            # Собираем все значения в колонке (заголовок + данные)
+            values = [str(column)] + [str(value) for value in df[column].tolist()]
+            
+            # Находим максимальную длину содержимого
+            max_len = max((len(str(value)) for value in values), default=0)
+            
+            # Добавляем небольшой отступ (2 символа) для комфортного отображения
+            calculated_width = max_len + 2
+            
+            # Применяем ограничения min_width и max_width
+            width = clamp_width(calculated_width, min_width, max_width)
+            
             column_letter = get_column_letter(col_idx)
             worksheet.column_dimensions[column_letter].width = width
 
+            # Форматируем данные в колонке
             if worksheet.max_row >= 2:
                 data_range = worksheet[f"{column_letter}2": f"{column_letter}{worksheet.max_row}"]
                 if (
@@ -2090,6 +2125,9 @@ class ExcelExporter:
         sheet_name: str,
         df: pd.DataFrame,
         written_sheets: Set[str],
+        min_width: int = 20,
+        max_width: int = 200,
+        wrap_text: bool = True,
     ) -> None:
         """Записывает DataFrame в лист Excel с форматированием.
         
@@ -2101,11 +2139,14 @@ class ExcelExporter:
             sheet_name: Имя листа для записи
             df: DataFrame с данными
             written_sheets: Множество уже записанных листов (изменяется на месте)
+            min_width: Минимальная ширина колонки в пунктах (по умолчанию 20)
+            max_width: Максимальная ширина колонки в пунктах (по умолчанию 200)
+            wrap_text: Включить перенос текста по строкам (по умолчанию True)
         """
         if sheet_name in written_sheets:
             return
         df.to_excel(writer, sheet_name=sheet_name, index=False)
-        ExcelExporter.format_sheet(writer, sheet_name, df)
+        ExcelExporter.format_sheet(writer, sheet_name, df, min_width, max_width, wrap_text)
         written_sheets.add(sheet_name)
 
 
@@ -2377,13 +2418,28 @@ def build_manager_summary(
     return aggregator.build_manager_summary(variant_df, include_tb, summary_name, manager_columns)
 
 
-def clamp_width(length: int) -> int:
-    """Ограничивает ширину столбца в диапазоне 70-200."""
+def clamp_width(length: int, min_width: int = 20, max_width: int = 200) -> int:
+    """Ограничивает ширину столбца в заданном диапазоне.
+    
+    Args:
+        length: Требуемая ширина столбца
+        min_width: Минимальная ширина (по умолчанию 20)
+        max_width: Максимальная ширина (по умолчанию 200)
+    
+    Returns:
+        Ширина столбца в пределах [min_width, max_width]
+    """
+    return max(min_width, min(length, max_width))
 
-    return max(70, min(length, 200))
 
-
-def format_excel_sheet(writer: pd.ExcelWriter, sheet_name: str, df: pd.DataFrame) -> None:
+def format_excel_sheet(
+    writer: pd.ExcelWriter, 
+    sheet_name: str, 
+    df: pd.DataFrame,
+    min_width: int = 20,
+    max_width: int = 200,
+    wrap_text: bool = True,
+) -> None:
     """Применяет форматирование листа Excel через openpyxl.
     
     Функция-обертка для ExcelExporter.format_sheet.
@@ -2393,8 +2449,11 @@ def format_excel_sheet(writer: pd.ExcelWriter, sheet_name: str, df: pd.DataFrame
         writer: ExcelWriter для записи
         sheet_name: Имя листа для форматирования
         df: DataFrame с данными
+        min_width: Минимальная ширина колонки в пунктах (по умолчанию 20)
+        max_width: Максимальная ширина колонки в пунктах (по умолчанию 200)
+        wrap_text: Включить перенос текста по строкам (по умолчанию True)
     """
-    ExcelExporter.format_sheet(writer, sheet_name, df)
+    ExcelExporter.format_sheet(writer, sheet_name, df, min_width, max_width, wrap_text)
 
 
 def format_decimal_string(value: float, decimals: int = 5) -> str:
@@ -3137,6 +3196,13 @@ def process_project(project_root: Path) -> None:
     identifiers = settings["identifiers"]
     spod_config = settings["spod"]
     report_layout = settings.get("report_layout", {})
+    excel_formatting = settings.get("excel_formatting", {})
+    
+    # Получаем параметры форматирования Excel
+    column_width_config = excel_formatting.get("column_width", {})
+    min_width = column_width_config.get("min_width", 20)
+    max_width = column_width_config.get("max_width", 200)
+    wrap_text = excel_formatting.get("wrap_text", True)
 
     def build_whitelist(key: str) -> Optional[Set[str]]:
         """Возвращает множество разрешённых листов для указанного блока."""
@@ -3547,7 +3613,15 @@ def process_project(project_root: Path) -> None:
                         func_name="process_project",
                     )
                 
-                excel_exporter.write_sheet(writer, sheet_name, table_to_write, written_sheets)
+                excel_exporter.write_sheet(
+                    writer, 
+                    sheet_name, 
+                    table_to_write, 
+                    written_sheets,
+                    min_width=min_width,
+                    max_width=max_width,
+                    wrap_text=wrap_text,
+                )
 
             # Записываем SUMMARY_TN (объединенный с процентилями)
             if should_write("SUMMARY_TN", summary_sheet_whitelist, "summary_sheets"):
