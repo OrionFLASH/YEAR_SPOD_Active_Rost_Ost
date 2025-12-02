@@ -220,8 +220,6 @@ def build_settings_tree() -> SettingsTree:
             # Глобальные параметры имени файлов/логов.
             "file_prefix": "YEAR_SPOD_Active_Rost_ost",
             "log_topic": "spod",
-            # Параметр для расчета процентилей (фильтр данных при расчете)
-            "percentile_filter": ">=0",  # Фильтр для расчета процентилей (">=0" - только неотрицательные, "all" - все)
             # Варианты выгрузки СПОД
             "variants": [
                 {
@@ -242,7 +240,7 @@ def build_settings_tree() -> SettingsTree:
                     "calc_sheet_name": "CALC_SCENARIO_PERC",
                     "source_type": "scenario_percentile",  # Использует PERCENTILE_TN
                     "value_column": "Обогнал_всего_%",  # Используется для сортировки и фильтрации
-                    "percentile_value_type": "обогнал",  # Тип значения для FACT_VALUE: "обогнал" (Обогнал_всего_%) или "обогнали" (Обогнали_меня_всего_%)
+                    # percentile_value_type берется из percentile_type выбранного варианта процентиля (variants.active_percentile_variant)
                     "fact_value_filter": ">=0",  # Фильтр для вывода в SPOD (все неотрицательные процентили)
                     "plan_value": 0.0,
                     "priority": 1,
@@ -3404,17 +3402,19 @@ def process_project(project_root: Path) -> None:
             if should_write(variant_name, spod_variant_whitelist, "spod_variants"):
                 # Определяем колонку для FACT_VALUE (для процентильного SPOD может отличаться от value_column)
                 percentile_value_column = None
-                percentile_value_type = spod_variant.get("percentile_value_type")
                 
-                # Если percentile_value_type не указан в SPOD варианте, используем percentile_type из варианта процентиля
-                if not percentile_value_type and source_type == "scenario_percentile":
+                # Для scenario_percentile всегда используем percentile_type из выбранного варианта процентиля
+                if source_type == "scenario_percentile":
                     percentile_value_type = percentile_type
                     log_debug(
                         logger,
-                        f"SPOD '{variant_name}': percentile_value_type не указан, используется percentile_type из варианта процентиля: '{percentile_value_type}'",
+                        f"SPOD '{variant_name}': используется percentile_type из варианта процентиля: '{percentile_value_type}'",
                         class_name="ProjectProcessor",
                         func_name="process_project",
                     )
+                else:
+                    # Для scenario_summary percentile_value_type не используется
+                    percentile_value_type = None
                 
                 if percentile_value_type:
                     if percentile_value_type == "обогнал":

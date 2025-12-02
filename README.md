@@ -228,11 +228,6 @@ YEAR_SPOD_Active_Rost_Ost/
   - `calc_sheet_name`: имя расчетного листа (не используется, оставлено для совместимости)
   - `source_type`: тип источника (`"scenario_summary"` или `"scenario_percentile"`)
   - `value_column`: колонка со значениями для выгрузки (используется для фильтрации и сортировки)
-  - `percentile_value_type`: тип значения для FACT_VALUE (только для процентильного SPOD, опционально)
-    - `"обогнал"` → используется колонка `Обогнал_всего_%` для FACT_VALUE
-    - `"обогнали"` → используется колонка `Обогнали_меня_всего_%` для FACT_VALUE
-    - Если не указан для `scenario_percentile`, используется `percentile_type` из выбранного варианта процентиля
-    - Если не указан для `scenario_summary`, используется `value_column`
   - `fact_value_filter`: фильтр для отбора данных (`">0"`, `">=0"`, `"all"` и т.д.)
   - `plan_value`: плановое значение (float)
   - `priority`: приоритет (int, по умолчанию 1)
@@ -240,6 +235,10 @@ YEAR_SPOD_Active_Rost_Ost/
   - `tournament_code`: код турнира
   - `contest_date`: дата конкурса (формат DD/MM/YYYY)
   - `include_in_csv`: включить ли в CSV выгрузку (bool)
+  
+  **Примечание**: Для вариантов с `source_type="scenario_percentile"` колонка для `FACT_VALUE` определяется автоматически на основе `percentile_type` из выбранного варианта процентиля (`variants.active_percentile_variant`):
+  - Если `percentile_type="обогнал"` → `FACT_VALUE = Обогнал_всего_%`
+  - Если `percentile_type="обогнали"` → `FACT_VALUE = Обогнали_меня_всего_%`
 
 ### 6.6 `variants` — варианты расчета прироста
 - `active_variant`: выбранный активный вариант для расчета прироста (`"variant_1"`, `"variant_2"` или `"variant_3"`)
