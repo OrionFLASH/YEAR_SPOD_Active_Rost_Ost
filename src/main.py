@@ -256,7 +256,9 @@ def build_settings_tree() -> SettingsTree:
         "variants": {
             # Выбор активного варианта для расчета (variant_1, variant_2 или variant_3)
             # Только выбранный вариант будет рассчитан и записан в Excel
-            "active_variant": "variant_2",  # По умолчанию вариант 3 (с ТБ)
+            "active_variant": "variant_2",  # По умолчанию вариант 2 (без ТБ)
+            # Выбор активного варианта для расчета процентиля (может отличаться от основного варианта)
+            "active_percentile_variant": "variant_2",  # По умолчанию тот же вариант, что и основной
             # Три варианта расчета прироста:
             # 1. По КМ (manager_id), без учета ТБ - суммируем в каждом файле по КМ, затем разница
             # 2. По ИНН (client_id), КМ определяется на конец (T-0 → T-1 → T-2), без ТБ
@@ -267,6 +269,10 @@ def build_settings_tree() -> SettingsTree:
                 "include_tb": False,
                 "summary_sheet_name": "SUMMARY_V1",
                 "percentile_sheet_name": "PERCENTILE_V1",
+                # Параметры расчета процентиля для этого варианта
+                "percentile_type": "обогнал",  # "обогнал" - кого я обогнал, "обогнали" - кто меня обогнал
+                "percentile_group_by": "all",  # "all" - среди всех, "tb" - среди тех же ТБ, "gosb" - среди тех же ГОСБ, "tb_and_gosb" - среди тех же ТБ и ГОСБ
+                "percentile_filter": ">=0",  # Фильтр для расчета процентилей (">=0" - только неотрицательные, "all" - все)
             },
             "variant_2": {
                 "name": "V2_ИНН_безТБ",
@@ -274,6 +280,10 @@ def build_settings_tree() -> SettingsTree:
                 "include_tb": False,
                 "summary_sheet_name": "SUMMARY_V2",
                 "percentile_sheet_name": "PERCENTILE_V2",
+                # Параметры расчета процентиля для этого варианта
+                "percentile_type": "обогнал",  # "обогнал" - кого я обогнал, "обогнали" - кто меня обогнал
+                "percentile_group_by": "all",  # "all" - среди всех, "tb" - среди тех же ТБ, "gosb" - среди тех же ГОСБ, "tb_and_gosb" - среди тех же ТБ и ГОСБ
+                "percentile_filter": ">=0",  # Фильтр для расчета процентилей (">=0" - только неотрицательные, "all" - все)
             },
             "variant_3": {
                 "name": "V3_ИНН_сТБ",
@@ -281,6 +291,10 @@ def build_settings_tree() -> SettingsTree:
                 "include_tb": True,  # С учетом ТБ
                 "summary_sheet_name": "SUMMARY_V3",
                 "percentile_sheet_name": "PERCENTILE_V3",
+                # Параметры расчета процентиля для этого варианта
+                "percentile_type": "обогнал",  # "обогнал" - кого я обогнал, "обогнали" - кто меня обогнал
+                "percentile_group_by": "tb",  # "all" - среди всех, "tb" - среди тех же ТБ, "gosb" - среди тех же ГОСБ, "tb_and_gosb" - среди тех же ТБ и ГОСБ
+                "percentile_filter": ">=0",  # Фильтр для расчета процентилей (">=0" - только неотрицательные, "all" - все)
             },
         },
         "report_layout": {
@@ -1858,7 +1872,9 @@ class PercentileCalculator:
         *,
         value_column: str,
         tb_column: Optional[str] = None,
+        gosb_column: Optional[str] = None,
         percentile_filter: str = "all",
+        group_by: str = "all",
     ) -> pd.DataFrame:
         """Добавляет в таблицу колонки процентных рангов и абсолютных значений.
         
@@ -1872,13 +1888,21 @@ class PercentileCalculator:
         
         Расчет выполняется по данным выбранного варианта (с ТБ или без ТБ).
         Данные для расчета могут быть отфильтрованы по percentile_filter.
+        Группировка может выполняться по ТБ, ГОСБ или их комбинации.
         
         Args:
             table: DataFrame с данными для расчета процентилей
             value_column: Имя колонки со значениями для расчета (например, "Прирост")
             tb_column: Имя колонки с ТБ для группировки (например, "ТБ"). 
-                       Если None, расчеты по ТБ не выполняются (используется вариант без ТБ)
+                       Если None, расчеты по ТБ не выполняются
+            gosb_column: Имя колонки с ГОСБ для группировки (например, "ГОСБ").
+                        Если None, расчеты по ГОСБ не выполняются
             percentile_filter: Фильтр для данных при расчете процентилей ("all", ">=0", ">0" и т.д.)
+            group_by: Тип группировки для расчета процентилей:
+                     - "all" - среди всех КМ
+                     - "tb" - среди КМ с тем же ТБ
+                     - "gosb" - среди КМ с тем же ГОСБ
+                     - "tb_and_gosb" - среди КМ с тем же ТБ и ГОСБ
         
         Returns:
             DataFrame с добавленными колонками процентилей
@@ -1908,9 +1932,7 @@ class PercentileCalculator:
         prepared["Обогнал_всего_кол"] = 0
         prepared["Обогнали_меня_всего_кол"] = 0
         prepared["Равных_всего_кол"] = 0
-        prepared["Всего_КМ_всего"] = len(filtered_indices)
-        
-        filtered_values = values.loc[filtered_indices]
+        prepared["Всего_КМ_всего"] = 0
         
         # Для каждой строки рассчитываем процентили относительно отфильтрованного набора
         for idx in prepared.index:
@@ -1921,18 +1943,52 @@ class PercentileCalculator:
                 if not filter_mask.loc[idx]:
                     continue
             
-            # Считаем процентили для текущего значения относительно отфильтрованного набора
-            less_count = (filtered_values < current_value).sum()
-            greater_count = (filtered_values > current_value).sum()
-            equal_count = (filtered_values == current_value).sum() - 1  # Исключаем саму строку
+            # Определяем набор для сравнения в зависимости от group_by
+            comparison_indices = filtered_indices.copy()
             
-            total = len(filtered_values)
-            if total > 1:
-                prepared.loc[idx, "Обогнал_всего_%"] = round((less_count / (total - 1)) * 100, 2)
-                prepared.loc[idx, "Обогнали_меня_всего_%"] = round((greater_count / (total - 1)) * 100, 2)
+            if group_by == "tb" and tb_column and tb_column in prepared.columns:
+                # Сравниваем только с КМ того же ТБ
+                current_tb = prepared.loc[idx, tb_column]
+                tb_mask = prepared.loc[comparison_indices, tb_column] == current_tb
+                comparison_indices = comparison_indices[tb_mask]
+            elif group_by == "gosb" and gosb_column and gosb_column in prepared.columns:
+                # Сравниваем только с КМ того же ГОСБ
+                current_gosb = prepared.loc[idx, gosb_column]
+                gosb_mask = prepared.loc[comparison_indices, gosb_column] == current_gosb
+                comparison_indices = comparison_indices[gosb_mask]
+            elif group_by == "tb_and_gosb":
+                # Сравниваем только с КМ того же ТБ и ГОСБ
+                if tb_column and tb_column in prepared.columns:
+                    current_tb = prepared.loc[idx, tb_column]
+                    tb_mask = prepared.loc[comparison_indices, tb_column] == current_tb
+                    comparison_indices = comparison_indices[tb_mask]
+                if gosb_column and gosb_column in prepared.columns:
+                    current_gosb = prepared.loc[idx, gosb_column]
+                    gosb_mask = prepared.loc[comparison_indices, gosb_column] == current_gosb
+                    comparison_indices = comparison_indices[gosb_mask]
+            # Если group_by == "all", используем все filtered_indices
+            
+            # Исключаем текущую строку из сравнения
+            comparison_indices = comparison_indices[comparison_indices != idx]
+            
+            if len(comparison_indices) == 0:
+                continue
+            
+            comparison_values = values.loc[comparison_indices]
+            
+            # Считаем процентили для текущего значения относительно группы сравнения
+            less_count = (comparison_values < current_value).sum()
+            greater_count = (comparison_values > current_value).sum()
+            equal_count = (comparison_values == current_value).sum()
+            
+            total = len(comparison_indices)
+            if total > 0:
+                prepared.loc[idx, "Обогнал_всего_%"] = round((less_count / total) * 100, 2)
+                prepared.loc[idx, "Обогнали_меня_всего_%"] = round((greater_count / total) * 100, 2)
             prepared.loc[idx, "Обогнал_всего_кол"] = less_count
             prepared.loc[idx, "Обогнали_меня_всего_кол"] = greater_count
             prepared.loc[idx, "Равных_всего_кол"] = max(0, equal_count)
+            prepared.loc[idx, "Всего_КМ_всего"] = total
 
         return prepared
 
@@ -3243,30 +3299,55 @@ def process_project(project_root: Path) -> None:
         else:
             raise ValueError(f"Неизвестный вариант: {active_variant_key}")
         
-        # Инициализируем калькулятор процентилей
-        percentile_calc = PercentileCalculator()
-        
-        # Добавляем процентили для выбранного варианта
-        # Используем фильтр из настроек SPOD для расчета процентилей
-        percentile_filter = spod_config.get("percentile_filter", "all")
-        selected_percentile = percentile_calc.append_percentile_columns(
-            selected_summary,
-            value_column="Прирост",
-            tb_column=tb_column,
-            percentile_filter=percentile_filter,
-        )
-        
         # Объединяем SUMMARY_TN и PERCENTILE_TN в один лист
         # Сначала данные по расчету приростов, затем процентили
         summary_tn_combined = selected_summary.copy()
         
-        # Добавляем ТБ и ГОСБ для каждого табельного номера
+        # Добавляем ТБ и ГОСБ для каждого табельного номера (нужно для расчета процентилей)
         manager_tb_mapping = build_manager_tb_mapping(current_df, previous_df)
         manager_gosb_mapping = build_manager_gosb_mapping(current_df, previous_df)
         
         # Добавляем ТБ и ГОСБ к summary_tn_combined
         summary_tn_combined["ТБ"] = summary_tn_combined[SELECTED_MANAGER_ID_COL].map(manager_tb_mapping).fillna("")
         summary_tn_combined["ГОСБ"] = summary_tn_combined[SELECTED_MANAGER_ID_COL].map(manager_gosb_mapping).fillna("")
+        
+        # Инициализируем калькулятор процентилей
+        percentile_calc = PercentileCalculator()
+        
+        # Получаем настройки для расчета процентиля из выбранного варианта процентиля
+        active_percentile_variant_key = variants_config.get("active_percentile_variant", active_variant_key)
+        active_percentile_variant_cfg = variants_config.get(active_percentile_variant_key, {})
+        
+        if not active_percentile_variant_cfg:
+            log_info(logger, f"Вариант процентиля '{active_percentile_variant_key}' не найден, используем настройки основного варианта")
+            active_percentile_variant_cfg = active_variant_cfg
+        
+        log_info(logger, f"Используется вариант процентиля: {active_percentile_variant_key} ({active_percentile_variant_cfg.get('name', '')})")
+        
+        # Получаем параметры расчета процентиля из настроек варианта
+        percentile_type = active_percentile_variant_cfg.get("percentile_type", "обогнал")
+        percentile_group_by = active_percentile_variant_cfg.get("percentile_group_by", "all")
+        percentile_filter = active_percentile_variant_cfg.get("percentile_filter", "all")
+        
+        # Определяем колонки для группировки
+        percentile_tb_column = None
+        percentile_gosb_column = None
+        
+        if percentile_group_by in ("tb", "tb_and_gosb"):
+            percentile_tb_column = "ТБ"
+        if percentile_group_by in ("gosb", "tb_and_gosb"):
+            percentile_gosb_column = "ГОСБ"
+        
+        # Добавляем процентили для выбранного варианта
+        # Используем summary_tn_combined, который уже содержит ТБ и ГОСБ
+        selected_percentile = percentile_calc.append_percentile_columns(
+            summary_tn_combined,
+            value_column="Прирост",
+            tb_column=percentile_tb_column,
+            gosb_column=percentile_gosb_column,
+            percentile_filter=percentile_filter,
+            group_by=percentile_group_by,
+        )
         
         # Добавляем процентильные колонки
         percentile_columns = [col for col in selected_percentile.columns if col not in summary_tn_combined.columns]
@@ -3324,6 +3405,17 @@ def process_project(project_root: Path) -> None:
                 # Определяем колонку для FACT_VALUE (для процентильного SPOD может отличаться от value_column)
                 percentile_value_column = None
                 percentile_value_type = spod_variant.get("percentile_value_type")
+                
+                # Если percentile_value_type не указан в SPOD варианте, используем percentile_type из варианта процентиля
+                if not percentile_value_type and source_type == "scenario_percentile":
+                    percentile_value_type = percentile_type
+                    log_debug(
+                        logger,
+                        f"SPOD '{variant_name}': percentile_value_type не указан, используется percentile_type из варианта процентиля: '{percentile_value_type}'",
+                        class_name="ProjectProcessor",
+                        func_name="process_project",
+                    )
+                
                 if percentile_value_type:
                     if percentile_value_type == "обогнал":
                         percentile_value_column = "Обогнал_всего_%"
