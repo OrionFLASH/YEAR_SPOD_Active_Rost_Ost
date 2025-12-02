@@ -3479,10 +3479,6 @@ def process_project(project_root: Path) -> None:
                 if spod_variant.get("include_in_csv", False):
                     csv_frames.append(spod_dataset)
         
-        # Получаем имена листов для выбранного варианта
-        selected_summary_sheet = active_variant_cfg.get("summary_sheet_name", "SUMMARY_TN")
-        selected_percentile_sheet = active_variant_cfg.get("percentile_sheet_name", "PERCENTILE_TN")
-        
         # Подготавливаем таблицы для вывода
         raw_tables = {
             "RAW_T0": format_raw_sheet(current_df, current_alias_to_source),
