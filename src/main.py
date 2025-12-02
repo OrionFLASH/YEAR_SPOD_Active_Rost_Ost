@@ -985,8 +985,16 @@ def build_client_summary_by_inn(
     result["Факт_T0"] = fact_t0_series
     result["Факт_T1"] = fact_t1_series
     
+    # ВАЖНО: заполняем NaN нулями ПЕРЕД расчетом прироста
+    # Если клиента нет в каком-то периоде, факт должен быть 0, а не NaN
+    result["Факт_T0"] = result["Факт_T0"].fillna(0.0)
+    result["Факт_T1"] = result["Факт_T1"].fillna(0.0)
+    if "Факт_T2" in result.columns:
+        result["Факт_T2"] = result["Факт_T2"].fillna(0.0)
+    
     # Вычисляем прирост
     # Формула с T-2: прирост = (T-0 - T-1) - (T-1 - T-2) = T0 - 2*T1 + T2
+    # Если есть только T-0 (T-1=0, T-2=0), то прирост = T0 - 2*0 + 0 = T0
     if previous2_df is not None and not previous2_df.empty and "Факт_T2" in result.columns:
         result["Прирост"] = (result["Факт_T0"] - result["Факт_T1"]) - (result["Факт_T1"] - result["Факт_T2"])
     else:
@@ -1668,15 +1676,21 @@ class Aggregator:
             else pd.DataFrame(columns=key_columns + ["ВКО", "Таб. номер ВКО"]).set_index(key_columns)
         )
 
-        # Объединяем: сначала prev2, затем prev, затем curr (приоритет curr)
+        # Объединяем все ключи из всех трех файлов (outer join)
+        # Приоритет: T-0 (curr) → T-1 (prev) → T-2 (prev2)
+        # Сначала объединяем prev2 и prev, затем добавляем curr
         combined = prev2.join(prev, how="outer", lsuffix="_prev2", rsuffix="_prev")
         combined = combined.join(curr, how="outer", rsuffix="_curr")
         
-        # Определяем актуального менеджера: приоритет curr → prev → prev2
+        # Определяем актуального менеджера: приоритет curr (T-0) → prev (T-1) → prev2 (T-2)
+        # combine_first берет значение из первой серии, если оно не NaN, иначе из второй, и т.д.
         # Проверяем наличие колонок перед обращением
         vko_curr = combined.get("ВКО_curr", pd.Series(index=combined.index, dtype=object))
         vko_prev = combined.get("ВКО_prev", pd.Series(index=combined.index, dtype=object))
         vko_prev2 = combined.get("ВКО_prev2", pd.Series(index=combined.index, dtype=object))
+        
+        # Приоритет: сначала curr (T-0), затем prev (T-1), затем prev2 (T-2)
+        # Если в T-0 есть значение - берем его, иначе смотрим T-1, иначе T-2
         combined["ВКО_Актуальный"] = (
             vko_curr
             .combine_first(vko_prev)
@@ -1687,6 +1701,8 @@ class Aggregator:
         tab_curr = combined.get("Таб. номер ВКО_curr", pd.Series(index=combined.index, dtype=object))
         tab_prev = combined.get("Таб. номер ВКО_prev", pd.Series(index=combined.index, dtype=object))
         tab_prev2 = combined.get("Таб. номер ВКО_prev2", pd.Series(index=combined.index, dtype=object))
+        
+        # Приоритет: сначала curr (T-0), затем prev (T-1), затем prev2 (T-2)
         combined["Таб. номер ВКО_Актуальный"] = (
             tab_curr
             .combine_first(tab_prev)
@@ -1776,20 +1792,77 @@ class Aggregator:
             ).rename(columns={"ВКО": "ВКО_T2", "Таб. номер ВКО": "Таб. номер ВКО_T2"})
             merged = merged.merge(best_previous2, on=key_columns, how="left")
             
+            # Для определения актуального менеджера используем все ключи из merged
+            # Приоритет: T-0 → T-1 → T-2
+            # Сначала создаем DataFrame со всеми ключами из merged
+            all_keys = merged[key_columns].drop_duplicates()
+            
+            # Объединяем с best_current, best_previous, best_previous2
+            # ВАЖНО: убеждаемся, что все ключи из all_keys присутствуют в best_current, best_previous, best_previous2
+            # Для этого делаем left merge с all_keys, чтобы гарантировать наличие всех ключей
+            best_current_renamed = best_current.rename(columns={"ВКО_T0": "ВКО", "Таб. номер ВКО_T0": "Таб. номер ВКО"})
+            best_previous_renamed = best_previous.rename(columns={"ВКО_T1": "ВКО", "Таб. номер ВКО_T1": "Таб. номер ВКО"})
+            best_previous2_renamed = best_previous2.rename(columns={"ВКО_T2": "ВКО", "Таб. номер ВКО_T2": "Таб. номер ВКО"})
+            
+            # Объединяем all_keys с best_current, best_previous, best_previous2, чтобы гарантировать наличие всех ключей
+            best_current_with_all_keys = all_keys.merge(best_current_renamed, on=key_columns, how="left")
+            best_previous_with_all_keys = all_keys.merge(best_previous_renamed, on=key_columns, how="left")
+            best_previous2_with_all_keys = all_keys.merge(best_previous2_renamed, on=key_columns, how="left")
+            
             latest = self.build_latest_manager_with_t2(
-                current_best=best_current.rename(columns={"ВКО_T0": "ВКО", "Таб. номер ВКО_T0": "Таб. номер ВКО"}),
-                previous_best=best_previous.rename(columns={"ВКО_T1": "ВКО", "Таб. номер ВКО_T1": "Таб. номер ВКО"}),
-                previous2_best=best_previous2.rename(columns={"ВКО_T2": "ВКО", "Таб. номер ВКО_T2": "Таб. номер ВКО"}),
+                current_best=best_current_with_all_keys,
+                previous_best=best_previous_with_all_keys,
+                previous2_best=best_previous2_with_all_keys,
                 key_columns=key_columns,
                 variant_name=variant_name,
             )
+            
+            # latest теперь должен содержать все ключи из all_keys
+            # Заполняем пропуски значениями по умолчанию ТОЛЬКО если менеджер не найден ни в одном файле
+            default_name = self.defaults["manager_name"]
+            identifier_settings = self.identifiers["manager_id"]
+            default_id = format_identifier(
+                self.defaults["manager_id"],
+                total_length=identifier_settings["total_length"],
+                fill_char=identifier_settings["fill_char"],
+            )
+            # Заполняем только если действительно нет значения (не должно быть после build_latest_manager_with_t2)
+            latest["ВКО_Актуальный"] = latest["ВКО_Актуальный"].fillna(default_name)
+            latest["Таб. номер ВКО_Актуальный"] = latest["Таб. номер ВКО_Актуальный"].fillna(default_id)
         else:
+            # Для двух файлов: приоритет T-0 → T-1
+            # Создаем DataFrame со всеми ключами из merged
+            all_keys = merged[key_columns].drop_duplicates()
+            
+            # Объединяем с best_current, best_previous
+            # ВАЖНО: убеждаемся, что все ключи из all_keys присутствуют в best_current, best_previous
+            # Для этого делаем left merge с all_keys, чтобы гарантировать наличие всех ключей
+            best_current_renamed = best_current.rename(columns={"ВКО_T0": "ВКО", "Таб. номер ВКО_T0": "Таб. номер ВКО"})
+            best_previous_renamed = best_previous.rename(columns={"ВКО_T1": "ВКО", "Таб. номер ВКО_T1": "Таб. номер ВКО"})
+            
+            # Объединяем all_keys с best_current, best_previous, чтобы гарантировать наличие всех ключей
+            best_current_with_all_keys = all_keys.merge(best_current_renamed, on=key_columns, how="left")
+            best_previous_with_all_keys = all_keys.merge(best_previous_renamed, on=key_columns, how="left")
+            
             latest = self.build_latest_manager(
-                current_best=best_current.rename(columns={"ВКО_T0": "ВКО", "Таб. номер ВКО_T0": "Таб. номер ВКО"}),
-                previous_best=best_previous.rename(columns={"ВКО_T1": "ВКО", "Таб. номер ВКО_T1": "Таб. номер ВКО"}),
+                current_best=best_current_with_all_keys,
+                previous_best=best_previous_with_all_keys,
                 key_columns=key_columns,
                 variant_name=variant_name,
             )
+            
+            # latest теперь должен содержать все ключи из all_keys
+            # Заполняем пропуски значениями по умолчанию ТОЛЬКО если менеджер не найден ни в одном файле
+            default_name = self.defaults["manager_name"]
+            identifier_settings = self.identifiers["manager_id"]
+            default_id = format_identifier(
+                self.defaults["manager_id"],
+                total_length=identifier_settings["total_length"],
+                fill_char=identifier_settings["fill_char"],
+            )
+            # Заполняем только если действительно нет значения (не должно быть после build_latest_manager)
+            latest["ВКО_Актуальный"] = latest["ВКО_Актуальный"].fillna(default_name)
+            latest["Таб. номер ВКО_Актуальный"] = latest["Таб. номер ВКО_Актуальный"].fillna(default_id)
         
         merged = merged.merge(latest, on=key_columns, how="left")
 
@@ -1821,7 +1894,7 @@ class Aggregator:
         
         Returns:
             DataFrame с колонками: Таб. номер ВКО (выбранный), ВКО (выбранный), ТБ (если include_tb),
-            Факт_T0, Факт_T1, Прирост
+            Факт_T0, Факт_T1, Факт_T2 (если есть в variant_df), Прирост
         """
         manager_id_col = manager_columns["id"]
         manager_name_col = manager_columns["name"]
@@ -1831,8 +1904,14 @@ class Aggregator:
         if tb_column_present:
             group_columns.append("tb")
 
+        # Определяем список числовых колонок для суммирования
+        numeric_columns = ["Факт_T0", "Факт_T1", "Прирост"]
+        # Добавляем Факт_T2, если он есть в данных (для варианта three)
+        if "Факт_T2" in variant_df.columns:
+            numeric_columns.insert(2, "Факт_T2")  # Вставляем между Факт_T1 и Прирост
+
         grouped = (
-            variant_df.groupby(group_columns, dropna=False)[["Факт_T0", "Факт_T1", "Прирост"]]
+            variant_df.groupby(group_columns, dropna=False)[numeric_columns]
             .sum()
             .reset_index()
         )
@@ -2051,7 +2130,7 @@ class Variant3Calculator(VariantCalculator):
         
         Returns:
             DataFrame с колонками: Таб. номер ВКО (выбранный), ВКО (выбранный), ТБ,
-            Факт_T0, Факт_T1, Прирост
+            Факт_T0, Факт_T1, Факт_T2 (если есть), Прирост
         """
         log_info(self.logger, "Расчет варианта 3: По ИНН, с учетом ТБ")
         
@@ -4086,7 +4165,11 @@ def process_project(project_root: Path) -> None:
                            "Сумма_2024", "Сумма_2025", "Месяцев_с_суммой_2024", "Месяцев_с_суммой_2025"]
         else:
             base_columns = [SELECTED_MANAGER_ID_COL, SELECTED_MANAGER_NAME_COL, "ТБ", "ГОСБ", 
-                           "Факт_T0", "Факт_T1", "Прирост"]
+                           "Факт_T0", "Факт_T1"]
+            # Добавляем Факт_T2, если он есть (для варианта three)
+            if "Факт_T2" in summary_tn_combined.columns:
+                base_columns.append("Факт_T2")
+            base_columns.append("Прирост")
             if "Количество записей" in summary_tn_combined.columns:
                 base_columns.append("Количество записей")
         percentile_cols = [col for col in percentile_columns if col not in base_columns]
