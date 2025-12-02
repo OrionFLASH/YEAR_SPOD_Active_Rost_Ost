@@ -268,7 +268,7 @@ def build_settings_tree() -> SettingsTree:
                     #     - Используется для выгрузки процентильных метрик
                     "source_type": "scenario_percentile",
                     "value_column": "Обогнал_всего_%",  # Используется для сортировки и фильтрации (НЕ для FACT_VALUE)
-                    # percentile_value_type для FACT_VALUE берется из percentile_type выбранного варианта процентиля (variants.active_percentile_variant)
+                    # percentile_value_type для FACT_VALUE берется из percentile_type настроек процентиля (variants.percentile_calculation.percentile_type)
                     "fact_value_filter": ">=0",  # Фильтр для вывода в SPOD (все неотрицательные процентили)
                     "plan_value": 0.0,
                     "priority": 1,
@@ -279,49 +279,34 @@ def build_settings_tree() -> SettingsTree:
                 },
             ],
         },
-        "variants": {
-            # Выбор активного варианта для расчета (variant_1, variant_2 или variant_3)
-            # Только выбранный вариант будет рассчитан и записан в Excel
-            "active_variant": "variant_2",  # По умолчанию вариант 2 (без ТБ)
-            # Выбор активного варианта для расчета процентиля (может отличаться от основного варианта)
-            "active_percentile_variant": "variant_2",  # По умолчанию тот же вариант, что и основной
-            # Три варианта расчета прироста:
-            # 1. По КМ (manager_id), без учета ТБ - суммируем в каждом файле по КМ, затем разница
-            # 2. По ИНН (client_id), КМ определяется на конец (T-0 → T-1 → T-2), без ТБ
-            # 3. По ИНН (client_id), КМ определяется на конец (T-0 → T-1 → T-2), с учетом ТБ
-            "variant_1": {
-                "name": "V1_КМ_безТБ",
-                "key_mode": "manager",  # Агрегация по manager_id
-                "include_tb": False,
-                "summary_sheet_name": "SUMMARY_V1",
-                "percentile_sheet_name": "PERCENTILE_V1",
-                # Параметры расчета процентиля для этого варианта
-                "percentile_type": "обогнал",  # "обогнал" - кого я обогнал, "обогнали" - кто меня обогнал
-                "percentile_group_by": "all",  # "all" - среди всех, "tb" - среди тех же ТБ, "gosb" - среди тех же ГОСБ, "tb_and_gosb" - среди тех же ТБ и ГОСБ
-                "percentile_filter": ">=0",  # Фильтр для расчета процентилей (">=0" - только неотрицательные, "all" - все)
-            },
-            "variant_2": {
-                "name": "V2_ИНН_безТБ",
-                "key_mode": "client",  # Агрегация по client_id
-                "include_tb": False,
-                "summary_sheet_name": "SUMMARY_V2",
-                "percentile_sheet_name": "PERCENTILE_V2",
-                # Параметры расчета процентиля для этого варианта
-                "percentile_type": "обогнал",  # "обогнал" - кого я обогнал, "обогнали" - кто меня обогнал
-                "percentile_group_by": "all",  # "all" - среди всех, "tb" - среди тех же ТБ, "gosb" - среди тех же ГОСБ, "tb_and_gosb" - среди тех же ТБ и ГОСБ
-                "percentile_filter": ">=0",  # Фильтр для расчета процентилей (">=0" - только неотрицательные, "all" - все)
-            },
-            "variant_3": {
-                "name": "V3_ИНН_сТБ",
-                "key_mode": "client",  # Агрегация по client_id
-                "include_tb": True,  # С учетом ТБ
-                "summary_sheet_name": "SUMMARY_V3",
-                "percentile_sheet_name": "PERCENTILE_V3",
-                # Параметры расчета процентиля для этого варианта
-                "percentile_type": "обогнал",  # "обогнал" - кого я обогнал, "обогнали" - кто меня обогнал
-                "percentile_group_by": "tb",  # "all" - среди всех, "tb" - среди тех же ТБ, "gosb" - среди тех же ГОСБ, "tb_and_gosb" - среди тех же ТБ и ГОСБ
-                "percentile_filter": ">=0",  # Фильтр для расчета процентилей (">=0" - только неотрицательные, "all" - все)
-            },
+        "main_calculation": {
+            # Параметры основного расчета прироста
+            # key_mode: режим агрегации данных
+            #   "manager" - агрегация по manager_id (табельному номеру), суммируем в каждом файле по КМ, затем разница
+            #   "client" - агрегация по client_id (ИНН), КМ определяется на конец периода (T-0 → T-1 → T-2)
+            "key_mode": "client",  # "manager" или "client"
+            # include_tb: учитывать ли ТБ при расчете (только для key_mode="client")
+            #   True - расчет с учетом ТБ (клиент привязан к КМ в рамках ТБ)
+            #   False - расчет без учета ТБ (клиент привязан к КМ глобально)
+            "include_tb": False,  # True или False
+        },
+        "percentile_calculation": {
+            # Параметры расчета процентиля (кто кого обогнал)
+            # percentile_type: тип процентиля
+            #   "обогнал" - рассчитывается процент КМ с меньшим результатом (кого я обогнал)
+            #   "обогнали" - рассчитывается процент КМ с большим результатом (кто меня обогнал)
+            "percentile_type": "обогнал",  # "обогнал" или "обогнали"
+            # percentile_group_by: уровень группировки для расчета процентиля
+            #   "all" - сравнение среди всех КМ
+            #   "tb" - сравнение только среди КМ с тем же ТБ
+            #   "gosb" - сравнение только среди КМ с тем же ГОСБ
+            #   "tb_and_gosb" - сравнение только среди КМ с тем же ТБ и ГОСБ одновременно
+            "percentile_group_by": "all",  # "all", "tb", "gosb" или "tb_and_gosb"
+            # percentile_filter: фильтр для данных при расчете процентилей
+            #   ">=0" - расчет только по неотрицательным значениям
+            #   ">0" - расчет только по положительным значениям
+            #   "all" - расчет по всем значениям
+            "percentile_filter": ">=0",  # ">=0", ">0", "all" и т.д.
         },
         "report_layout": {
             # Управляет тем, какие листы попадают в основной Excel (пустой список = блок отключён).
@@ -3151,7 +3136,6 @@ def process_project(project_root: Path) -> None:
     defaults = settings["defaults"]
     identifiers = settings["identifiers"]
     spod_config = settings["spod"]
-    variants_config = settings.get("variants", {})
     report_layout = settings.get("report_layout", {})
 
     def build_whitelist(key: str) -> Optional[Set[str]]:
@@ -3266,64 +3250,65 @@ def process_project(project_root: Path) -> None:
                 log_info(logger, f"Файл T-2 не найден: {previous2_meta['file_name']}, используется логика с 2 файлами")
                 use_t2 = False
 
-        # Получаем выбранный активный вариант
-        active_variant_key = variants_config.get("active_variant", "variant_3")
-        active_variant_cfg = variants_config.get(active_variant_key, {})
+        # Получаем параметры основного расчета и процентиля
+        main_calc_config = settings.get("main_calculation", {})
+        percentile_calc_config = settings.get("percentile_calculation", {})
         
-        if not active_variant_cfg:
-            raise ValueError(
-                f"Активный вариант '{active_variant_key}' не найден в настройках. "
-                f"Доступные варианты: variant_1, variant_2, variant_3"
-            )
+        # Проверяем наличие необходимых блоков настроек
+        if not main_calc_config:
+            raise ValueError("Блок 'main_calculation' не найден в настройках")
+        if not percentile_calc_config:
+            raise ValueError("Блок 'percentile_calculation' не найден в настройках")
         
-        log_info(logger, f"Используется активный вариант: {active_variant_key} ({active_variant_cfg.get('name', '')})")
+        # Получаем параметры основного расчета
+        key_mode = main_calc_config.get("key_mode", "client")
+        include_tb = main_calc_config.get("include_tb", False)
         
-        # Рассчитываем только выбранный вариант
-        # Также получаем variant_df для вариантов 2 и 3 (для свода по ИНН)
+        log_info(logger, f"Параметры основного расчета: key_mode={key_mode}, include_tb={include_tb}")
+        
+        # Рассчитываем основной свод в зависимости от параметров
         variant_df_for_client_summary = None
-        key_mode = active_variant_cfg.get("key_mode", "manager")
         
-        if active_variant_key == "variant_1":
+        if key_mode == "manager":
+            # Расчет по КМ (manager_id), без учета ТБ
             selected_summary = calculate_variant_1(
-            current_df, previous_df, previous2_df if use_t2 else None,
-            defaults, identifiers, logger
-        )
-            include_tb = active_variant_cfg.get("include_tb", False)
-            tb_column = "ТБ" if include_tb else None
-        elif active_variant_key == "variant_2":
-            # Получаем variant_df для свода по ИНН
-            aggregator = Aggregator(defaults, identifiers, logger)
-            variant_df_for_client_summary = aggregator.assemble_variant_dataset_with_t2(
-                variant_name="V2_ИНН_безТБ",
-                key_columns=["client_id"],
-                current_df=current_df,
-                previous_df=previous_df,
-                previous2_df=previous2_df if use_t2 else None,
+                current_df, previous_df, previous2_df if use_t2 else None,
+                defaults, identifiers, logger
             )
-            selected_summary = calculate_variant_2(
-            current_df, previous_df, previous2_df if use_t2 else None,
-            defaults, identifiers, logger
-        )
-            include_tb = active_variant_cfg.get("include_tb", False)
-            tb_column = "ТБ" if include_tb else None
-        elif active_variant_key == "variant_3":
-            # Получаем variant_df для свода по ИНН
-            aggregator = Aggregator(defaults, identifiers, logger)
-            variant_df_for_client_summary = aggregator.assemble_variant_dataset_with_t2(
-                variant_name="V3_ИНН_сТБ",
-                key_columns=["client_id", "tb"],
-                current_df=current_df,
-                previous_df=previous_df,
-                previous2_df=previous2_df if use_t2 else None,
-            )
-            selected_summary = calculate_variant_3(
-            current_df, previous_df, previous2_df if use_t2 else None,
-            defaults, identifiers, logger
-        )
-            include_tb = active_variant_cfg.get("include_tb", True)
-            tb_column = "ТБ" if include_tb else None
+            tb_column = None
+        elif key_mode == "client":
+            if include_tb:
+                # Расчет по ИНН (client_id), с учетом ТБ
+                aggregator = Aggregator(defaults, identifiers, logger)
+                variant_df_for_client_summary = aggregator.assemble_variant_dataset_with_t2(
+                    variant_name="ИНН_сТБ",
+                    key_columns=["client_id", "tb"],
+                    current_df=current_df,
+                    previous_df=previous_df,
+                    previous2_df=previous2_df if use_t2 else None,
+                )
+                selected_summary = calculate_variant_3(
+                    current_df, previous_df, previous2_df if use_t2 else None,
+                    defaults, identifiers, logger
+                )
+                tb_column = "ТБ"
+            else:
+                # Расчет по ИНН (client_id), без учета ТБ
+                aggregator = Aggregator(defaults, identifiers, logger)
+                variant_df_for_client_summary = aggregator.assemble_variant_dataset_with_t2(
+                    variant_name="ИНН_безТБ",
+                    key_columns=["client_id"],
+                    current_df=current_df,
+                    previous_df=previous_df,
+                    previous2_df=previous2_df if use_t2 else None,
+                )
+                selected_summary = calculate_variant_2(
+                    current_df, previous_df, previous2_df if use_t2 else None,
+                    defaults, identifiers, logger
+                )
+                tb_column = None
         else:
-            raise ValueError(f"Неизвестный вариант: {active_variant_key}")
+            raise ValueError(f"Неизвестный key_mode: {key_mode}. Допустимые значения: 'manager' или 'client'")
         
         # Объединяем SUMMARY_TN и PERCENTILE_TN в один лист
         # Сначала данные по расчету приростов, затем процентили
@@ -3340,20 +3325,12 @@ def process_project(project_root: Path) -> None:
         # Инициализируем калькулятор процентилей
         percentile_calc = PercentileCalculator()
         
-        # Получаем настройки для расчета процентиля из выбранного варианта процентиля
-        active_percentile_variant_key = variants_config.get("active_percentile_variant", active_variant_key)
-        active_percentile_variant_cfg = variants_config.get(active_percentile_variant_key, {})
+        # Получаем параметры расчета процентиля
+        percentile_type = percentile_calc_config.get("percentile_type", "обогнал")
+        percentile_group_by = percentile_calc_config.get("percentile_group_by", "all")
+        percentile_filter = percentile_calc_config.get("percentile_filter", "all")
         
-        if not active_percentile_variant_cfg:
-            log_info(logger, f"Вариант процентиля '{active_percentile_variant_key}' не найден, используем настройки основного варианта")
-            active_percentile_variant_cfg = active_variant_cfg
-        
-        log_info(logger, f"Используется вариант процентиля: {active_percentile_variant_key} ({active_percentile_variant_cfg.get('name', '')})")
-        
-        # Получаем параметры расчета процентиля из настроек варианта
-        percentile_type = active_percentile_variant_cfg.get("percentile_type", "обогнал")
-        percentile_group_by = active_percentile_variant_cfg.get("percentile_group_by", "all")
-        percentile_filter = active_percentile_variant_cfg.get("percentile_filter", "all")
+        log_info(logger, f"Параметры расчета процентиля: percentile_type={percentile_type}, percentile_group_by={percentile_group_by}, percentile_filter={percentile_filter}")
         
         # Определяем колонки для группировки
         percentile_tb_column = None
@@ -3431,7 +3408,7 @@ def process_project(project_root: Path) -> None:
                 # Определяем колонку для FACT_VALUE (для процентильного SPOD может отличаться от value_column)
                 percentile_value_column = None
                 
-                # Для scenario_percentile всегда используем percentile_type из выбранного варианта процентиля
+                # Для scenario_percentile всегда используем percentile_type из настроек процентиля
                 if source_type == "scenario_percentile":
                     percentile_value_type = percentile_type
                     log_debug(
