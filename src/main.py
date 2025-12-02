@@ -1525,19 +1525,29 @@ class Aggregator:
     ) -> pd.DataFrame:
         """Определяет доминантного менеджера (по сумме факта) для каждого ключа.
         
+        ВАЖНО: Возвращает менеджера даже если сумма факта = 0, если клиент есть в файле.
+        Если клиента нет в файле (после фильтрации), то его не будет в результате.
+        
         Алгоритм:
         1. Группирует данные по (ключ, manager_id, manager_name) и суммирует fact_value_clean
         2. Для каждого ключа выбирает менеджера с максимальной суммой
-        3. Если суммы равны, pandas idxmax вернёт первую попавшуюся
+        3. Если суммы равны (включая случай, когда все суммы = 0), pandas idxmax вернёт первую попавшуюся
+        4. Если клиента нет в файле (после фильтрации), то его не будет в результате
         
         Args:
-            df: Исходный DataFrame с данными
+            df: Исходный DataFrame с данными (уже отфильтрованный)
             key_columns: Список колонок для ключа (например, ["client_id"] или ["client_id", "tb"])
             variant_name: Имя варианта для логирования
         
         Returns:
             DataFrame с колонками key_columns, "ВКО", "Таб. номер ВКО"
+            Содержит только те ключи, которые есть в df (после фильтрации).
+            Если клиента нет в df, его не будет в результате.
         """
+        # Если DataFrame пустой, возвращаем пустой результат
+        if df.empty:
+            return pd.DataFrame(columns=key_columns + ["ВКО", "Таб. номер ВКО"])
+        
         additional_columns = [
             column for column in ("manager_name", "manager_id") if column not in key_columns
         ]
@@ -1548,6 +1558,7 @@ class Aggregator:
             .groupby(grouping_columns, dropna=False, as_index=False)
             .sum(numeric_only=True)
         )
+        # idxmax вернет индекс даже если все значения = 0 (если клиент есть в файле)
         idx = grouped.groupby(key_columns, dropna=False)["fact_value_clean"].idxmax()
         best = grouped.loc[idx, key_columns + additional_columns].copy()
         result = best.copy()
@@ -1820,6 +1831,16 @@ class Aggregator:
             
             # Для определения актуального менеджера используем все ключи из merged
             # Приоритет: T-0 → T-1 → T-2
+            # 
+            # ЛОГИКА РАБОТЫ:
+            # 1. select_best_manager возвращает менеджера для каждого ключа (ИНН), который есть в файле
+            #    - Если клиент есть в файле (даже с суммой = 0), менеджер будет найден
+            #    - Если клиента нет в файле (после фильтрации), его не будет в best_current/best_previous/best_previous2
+            # 2. build_latest_manager_with_t2 делает outer join всех ключей из всех трех файлов
+            #    - Если клиент есть только в T-0, он будет в best_current_renamed
+            #    - combine_first берет значение из T-0 (приоритет T-0 → T-1 → T-2)
+            # 3. Если ни в одном файле не найден менеджер, fillna заполнит значением по умолчанию
+            # 
             # Сначала создаем DataFrame со всеми ключами из merged
             all_keys = merged[key_columns].drop_duplicates()
             
@@ -1832,6 +1853,7 @@ class Aggregator:
             
             # Вызываем build_latest_manager_with_t2 с исходными данными
             # build_latest_manager_with_t2 сам делает outer join и объединяет все ключи из всех трех файлов
+            # Если клиент есть только в T-0, он будет в best_current_renamed, и combine_first возьмет значение из T-0
             latest = self.build_latest_manager_with_t2(
                 current_best=best_current_renamed,
                 previous_best=best_previous_renamed,
