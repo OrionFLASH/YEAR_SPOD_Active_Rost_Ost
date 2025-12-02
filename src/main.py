@@ -1605,13 +1605,22 @@ class Aggregator:
             else pd.DataFrame(columns=key_columns + ["ВКО", "Таб. номер ВКО"]).set_index(key_columns)
         )
 
-        combined = prev.join(
-            curr,
-            how="outer",
-            lsuffix="_prev",
-            rsuffix="_curr",
-        )
-        # Проверяем наличие колонок перед обращением
+        # ВАЖНО: переименовываем колонки ПЕРЕД join, чтобы гарантировать правильные имена
+        # Переименовываем колонки в каждом DataFrame (если они не пустые)
+        if not prev.empty:
+            prev_renamed = prev.rename(columns={"ВКО": "ВКО_prev", "Таб. номер ВКО": "Таб. номер ВКО_prev"})
+        else:
+            prev_renamed = pd.DataFrame(columns=key_columns + ["ВКО_prev", "Таб. номер ВКО_prev"]).set_index(key_columns)
+        
+        if not curr.empty:
+            curr_renamed = curr.rename(columns={"ВКО": "ВКО_curr", "Таб. номер ВКО": "Таб. номер ВКО_curr"})
+        else:
+            curr_renamed = pd.DataFrame(columns=key_columns + ["ВКО_curr", "Таб. номер ВКО_curr"]).set_index(key_columns)
+        
+        # Теперь объединяем с правильными именами колонок
+        combined = prev_renamed.join(curr_renamed, how="outer")
+        
+        # Проверяем наличие колонок перед обращением (теперь имена колонок гарантированы)
         vko_curr = combined.get("ВКО_curr", pd.Series(index=combined.index, dtype=object))
         vko_prev = combined.get("ВКО_prev", pd.Series(index=combined.index, dtype=object))
         combined["ВКО_Актуальный"] = vko_curr.combine_first(vko_prev).fillna(default_name)
@@ -1678,9 +1687,26 @@ class Aggregator:
 
         # Объединяем все ключи из всех трех файлов (outer join)
         # Приоритет: T-0 (curr) → T-1 (prev) → T-2 (prev2)
-        # Сначала объединяем prev2 и prev, затем добавляем curr
-        combined = prev2.join(prev, how="outer", lsuffix="_prev2", rsuffix="_prev")
-        combined = combined.join(curr, how="outer", rsuffix="_curr")
+        # ВАЖНО: переименовываем колонки ПЕРЕД join, чтобы гарантировать правильные имена
+        # Сначала переименовываем колонки в каждом DataFrame (если они не пустые)
+        if not prev2.empty:
+            prev2_renamed = prev2.rename(columns={"ВКО": "ВКО_prev2", "Таб. номер ВКО": "Таб. номер ВКО_prev2"})
+        else:
+            prev2_renamed = pd.DataFrame(columns=key_columns + ["ВКО_prev2", "Таб. номер ВКО_prev2"]).set_index(key_columns)
+        
+        if not prev.empty:
+            prev_renamed = prev.rename(columns={"ВКО": "ВКО_prev", "Таб. номер ВКО": "Таб. номер ВКО_prev"})
+        else:
+            prev_renamed = pd.DataFrame(columns=key_columns + ["ВКО_prev", "Таб. номер ВКО_prev"]).set_index(key_columns)
+        
+        if not curr.empty:
+            curr_renamed = curr.rename(columns={"ВКО": "ВКО_curr", "Таб. номер ВКО": "Таб. номер ВКО_curr"})
+        else:
+            curr_renamed = pd.DataFrame(columns=key_columns + ["ВКО_curr", "Таб. номер ВКО_curr"]).set_index(key_columns)
+        
+        # Теперь объединяем с правильными именами колонок
+        combined = prev2_renamed.join(prev_renamed, how="outer")
+        combined = combined.join(curr_renamed, how="outer")
         
         # Определяем актуального менеджера: приоритет curr (T-0) → prev (T-1) → prev2 (T-2)
         # combine_first берет значение из первой серии, если оно не NaN, иначе из второй, и т.д.
@@ -1797,28 +1823,30 @@ class Aggregator:
             # Сначала создаем DataFrame со всеми ключами из merged
             all_keys = merged[key_columns].drop_duplicates()
             
-            # Объединяем с best_current, best_previous, best_previous2
-            # ВАЖНО: убеждаемся, что все ключи из all_keys присутствуют в best_current, best_previous, best_previous2
-            # Для этого делаем left merge с all_keys, чтобы гарантировать наличие всех ключей
+            # Переименовываем колонки для build_latest_manager_with_t2
+            # ВАЖНО: НЕ делаем merge с all_keys перед вызовом build_latest_manager_with_t2,
+            # потому что build_latest_manager_with_t2 сам делает outer join и объединяет все ключи
             best_current_renamed = best_current.rename(columns={"ВКО_T0": "ВКО", "Таб. номер ВКО_T0": "Таб. номер ВКО"})
             best_previous_renamed = best_previous.rename(columns={"ВКО_T1": "ВКО", "Таб. номер ВКО_T1": "Таб. номер ВКО"})
             best_previous2_renamed = best_previous2.rename(columns={"ВКО_T2": "ВКО", "Таб. номер ВКО_T2": "Таб. номер ВКО"})
             
-            # Объединяем all_keys с best_current, best_previous, best_previous2, чтобы гарантировать наличие всех ключей
-            best_current_with_all_keys = all_keys.merge(best_current_renamed, on=key_columns, how="left")
-            best_previous_with_all_keys = all_keys.merge(best_previous_renamed, on=key_columns, how="left")
-            best_previous2_with_all_keys = all_keys.merge(best_previous2_renamed, on=key_columns, how="left")
-            
+            # Вызываем build_latest_manager_with_t2 с исходными данными
+            # build_latest_manager_with_t2 сам делает outer join и объединяет все ключи из всех трех файлов
             latest = self.build_latest_manager_with_t2(
-                current_best=best_current_with_all_keys,
-                previous_best=best_previous_with_all_keys,
-                previous2_best=best_previous2_with_all_keys,
+                current_best=best_current_renamed,
+                previous_best=best_previous_renamed,
+                previous2_best=best_previous2_renamed,
                 key_columns=key_columns,
                 variant_name=variant_name,
             )
             
-            # latest теперь должен содержать все ключи из all_keys
+            # Убеждаемся, что latest содержит все ключи из merged
+            # Если в latest нет ключа из merged, добавляем его с значениями по умолчанию
+            latest = all_keys.merge(latest, on=key_columns, how="left")
+            
             # Заполняем пропуски значениями по умолчанию ТОЛЬКО если менеджер не найден ни в одном файле
+            # Если клиент есть только в T-0, то latest уже должен содержать правильное значение из T-0
+            # после build_latest_manager_with_t2, поэтому fillna применяется только к действительно отсутствующим значениям
             default_name = self.defaults["manager_name"]
             identifier_settings = self.identifiers["manager_id"]
             default_id = format_identifier(
@@ -1834,25 +1862,28 @@ class Aggregator:
             # Создаем DataFrame со всеми ключами из merged
             all_keys = merged[key_columns].drop_duplicates()
             
-            # Объединяем с best_current, best_previous
-            # ВАЖНО: убеждаемся, что все ключи из all_keys присутствуют в best_current, best_previous
-            # Для этого делаем left merge с all_keys, чтобы гарантировать наличие всех ключей
+            # Переименовываем колонки для build_latest_manager
+            # ВАЖНО: НЕ делаем merge с all_keys перед вызовом build_latest_manager,
+            # потому что build_latest_manager сам делает outer join и объединяет все ключи
             best_current_renamed = best_current.rename(columns={"ВКО_T0": "ВКО", "Таб. номер ВКО_T0": "Таб. номер ВКО"})
             best_previous_renamed = best_previous.rename(columns={"ВКО_T1": "ВКО", "Таб. номер ВКО_T1": "Таб. номер ВКО"})
             
-            # Объединяем all_keys с best_current, best_previous, чтобы гарантировать наличие всех ключей
-            best_current_with_all_keys = all_keys.merge(best_current_renamed, on=key_columns, how="left")
-            best_previous_with_all_keys = all_keys.merge(best_previous_renamed, on=key_columns, how="left")
-            
+            # Вызываем build_latest_manager с исходными данными
+            # build_latest_manager сам делает outer join и объединяет все ключи из обоих файлов
             latest = self.build_latest_manager(
-                current_best=best_current_with_all_keys,
-                previous_best=best_previous_with_all_keys,
+                current_best=best_current_renamed,
+                previous_best=best_previous_renamed,
                 key_columns=key_columns,
                 variant_name=variant_name,
             )
             
-            # latest теперь должен содержать все ключи из all_keys
+            # Убеждаемся, что latest содержит все ключи из merged
+            # Если в latest нет ключа из merged, добавляем его с значениями по умолчанию
+            latest = all_keys.merge(latest, on=key_columns, how="left")
+            
             # Заполняем пропуски значениями по умолчанию ТОЛЬКО если менеджер не найден ни в одном файле
+            # Если клиент есть только в T-0, то latest уже должен содержать правильное значение из T-0
+            # после build_latest_manager, поэтому fillna применяется только к действительно отсутствующим значениям
             default_name = self.defaults["manager_name"]
             identifier_settings = self.identifiers["manager_id"]
             default_id = format_identifier(
