@@ -98,7 +98,7 @@ def build_settings_tree() -> SettingsTree:
                 {
                     "key": "previous2",        # фиксированный ключ T-2.
                     "label": "T-2",
-                    "file_name": "",  # Если пустое "", используется логика с 2 файлами
+                    "file_name": "2025_M-8_DIF.xlsx",  # Если пустое "", используется логика с 2 файлами
                     "sheet": "Sheet1",
                     # Колонки для этого файла (если пустой массив [], используются из defaults.columns)
                     "columns": [
@@ -120,6 +120,69 @@ def build_settings_tree() -> SettingsTree:
                         ],
                     },
                 },
+                {
+                    "key": "single",          # фиксированный ключ для одного файла (только для use_files_count="one")
+                    "label": "Single",        # подпись, которая пойдёт в логи.
+                    "file_name": "2025_M-10_DIF.xlsx",  # Имя файла в каталоге IN (например, "2025_M-10_DIF.xlsx")
+                    "sheet": "Sheet1",
+                    # Колонки для этого файла (НЕ используются значения из defaults.columns, только свои)
+                    # Для варианта 1 файл будет свой набор колонок, не связанный с default
+                    "columns": [
+                        # {"alias": "tb", "source": "Короткое ТБ"},
+                        # {"alias": "gosb", "source": "Полное ГОСБ"},
+                        # {"alias": "manager_name", "source": "ФИО"},
+                        # {"alias": "manager_id", "source": "Табельный номер"},
+                        # {"alias": "client_id", "source": "ИНН"},
+                        # {"alias": "fact_value", "source": "Факт"},
+                    ],
+                    # Фильтры для этого файла (НЕ используются значения из defaults.drop_rules, только свои)
+                    # Для варианта 1 файл будет свой набор фильтров, не связанный с default
+                    "filters": {
+                        # drop_rules: правила удаления строк (только свои, не из defaults)
+                        "drop_rules": [
+                            # {"alias": "manager_name", "values": ["-", "Серая зона"], "remove_unconditionally": True, "check_by_inn": False, "check_by_tn": False},
+                        ],
+                        # in_rules: правила включения строк (что ДОЛЖНО попасть в расчет)
+                        #   - Строка попадает в расчет только если она проходит ВСЕ условия из in_rules (И)
+                        #   - И при этом НЕ попадает под drop_rules (исключается из DROP)
+                        #   - Формат: {"alias": "имя_колонки", "values": ["значение1", "значение2"], "condition": "in" или "not_in"}
+                        #   - "in": значение должно быть в списке values
+                        #   - "not_in": значение НЕ должно быть в списке values
+                        "in_rules": [
+                            # {"alias": "manager_id", "values": ["12345", "67890"], "condition": "in"},
+                            # {"alias": "tb", "values": ["ЦА"], "condition": "not_in"},
+                        ],
+                    },
+                },
+                # Файлы для нового варианта расчета (use_files_count="new"): 24 файла (12 для 2025 и 12 для 2024)
+                # Для каждого файла действуют параметры как для базового расчета (columns и drop_rules)
+                # Если пусто - берем из defaults
+                *[
+                    {
+                        "key": f"2025_T-{i}",
+                        "label": f"2025_T-{i}",
+                        "file_name": "",  # Задается пользователем
+                        "sheet": "Sheet1",
+                        "columns": [],  # Если пустой массив [], используются из defaults.columns
+                        "filters": {
+                            "drop_rules": [],  # Если пустой массив [], используются из defaults.drop_rules
+                        },
+                    }
+                    for i in range(12)
+                ],
+                *[
+                    {
+                        "key": f"2024_T-{i}",
+                        "label": f"2024_T-{i}",
+                        "file_name": "",  # Задается пользователем
+                        "sheet": "Sheet1",
+                        "columns": [],  # Если пустой массив [], используются из defaults.columns
+                        "filters": {
+                            "drop_rules": [],  # Если пустой массив [], используются из defaults.drop_rules
+                        },
+                    }
+                    for i in range(12)
+                ],
             ],
         },
         "defaults": {
@@ -281,18 +344,58 @@ def build_settings_tree() -> SettingsTree:
         },
         "main_calculation": {
             # Параметры основного расчета прироста
-            # key_mode: режим агрегации данных
-            #   "manager" - агрегация по manager_id (табельному номеру), суммируем в каждом файле по КМ, затем разница
-            #   "client" - агрегация по client_id (ИНН), КМ определяется на конец периода (T-0 → T-1 → T-2)
-            "key_mode": "client",  # "manager" или "client"
-            # include_tb: учитывать ли ТБ при расчете (только для key_mode="client")
-            #   True - расчет с учетом ТБ (клиент привязан к КМ в рамках ТБ)
-            #   False - расчет без учета ТБ (клиент привязан к КМ глобально)
-            "include_tb": False,  # True или False
-            # use_files_count: количество файлов для расчета (2 или 3)
-            #   2 - расчет по двум файлам (T-0 и T-1), требуется наличие current и previous
-            #   3 - расчет по трем файлам (T-0, T-1 и T-2), требуется наличие current, previous и previous2
-            "use_files_count": 2,  # 2 или 3
+            # use_files_count: количество файлов для расчета (текстовые значения)
+            #   "one" - расчет по одному файлу (используются параметры из one_file)
+            #   "two" - расчет по двум файлам (используются параметры из two_files)
+            #   "three" - расчет по трем файлам (используются параметры из three_files)
+            #   "new" - расчет по 24 файлам (12 для 2025 и 12 для 2024) - поиск новых клиентов
+            "use_files_count": "two",  # "one", "two", "three" или "new"
+            
+            # one_file: параметры для расчета по одному файлу (только для use_files_count="one")
+            # Примечание: file_name, sheet, columns и filters находятся в files.items с key="single"
+            "one_file": {
+                # calculation_type: тип расчета для одного файла
+                #   "count" - количество строк (сделок) для каждого ТН
+                #   "max" - максимальная сумма среди строк для каждого КМ
+                "calculation_type": "count",  # "count" или "max"
+            },
+            
+            # two_files: параметры для расчета по двум файлам (только для use_files_count="two")
+            "two_files": {
+                # key_mode: режим агрегации данных
+                #   "manager" - агрегация по manager_id (табельному номеру), суммируем в каждом файле по КМ, затем разница
+                #   "client" - агрегация по client_id (ИНН), КМ определяется на конец периода (T-0 → T-1)
+                "key_mode": "client",  # "manager" или "client"
+                # include_tb: учитывать ли ТБ при расчете (только для key_mode="client")
+                #   True - расчет с учетом ТБ (клиент привязан к КМ в рамках ТБ)
+                #   False - расчет без учета ТБ (клиент привязан к КМ глобально)
+                "include_tb": False,  # True или False
+            },
+            
+            # three_files: параметры для расчета по трем файлам (только для use_files_count="three")
+            "three_files": {
+                # key_mode: режим агрегации данных
+                #   "manager" - агрегация по manager_id (табельному номеру), суммируем в каждом файле по КМ, затем разница
+                #   "client" - агрегация по client_id (ИНН), КМ определяется на конец периода (T-0 → T-1 → T-2)
+                "key_mode": "client",  # "manager" или "client"
+                # include_tb: учитывать ли ТБ при расчете (только для key_mode="client")
+                #   True - расчет с учетом ТБ (клиент привязан к КМ в рамках ТБ)
+                #   False - расчет без учета ТБ (клиент привязан к КМ глобально)
+                "include_tb": False,  # True или False
+            },
+            
+            # new_files: параметры для расчета по 24 файлам (только для use_files_count="new")
+            # Поиск новых клиентов: ИНН с суммой факта в 2025 > 0, но сумма факта в 2024 = 0 или его нет
+            "new_files": {
+                # key_mode: режим агрегации данных
+                #   "manager" - агрегация по manager_id (табельному номеру)
+                #   "client" - агрегация по client_id (ИНН), КМ определяется на конец периода
+                "key_mode": "client",  # "manager" или "client"
+                # include_tb: учитывать ли ТБ при расчете (только для key_mode="client")
+                #   True - расчет с учетом ТБ (клиент привязан к КМ в рамках ТБ)
+                #   False - расчет без учета ТБ (клиент привязан к КМ глобально)
+                "include_tb": False,  # True или False
+            },
         },
         "percentile_calculation": {
             # Параметры расчета процентиля (кто кого обогнал)
@@ -387,17 +490,20 @@ def resolve_sheet_name(file_section: Dict[str, Any], file_key: str) -> str:
     return meta.get("sheet") or file_section.get("sheet", "Sheet1")
 
 
-def get_file_columns(file_section: Dict[str, Any], file_key: str, defaults: Dict[str, Any]) -> List[Dict[str, str]]:
+def get_file_columns(file_section: Dict[str, Any], file_key: str, defaults: Dict[str, Any], use_defaults: bool = True) -> List[Dict[str, str]]:
     """Возвращает колонки для конкретного файла.
     
     Логика:
     - Если в items для файла есть columns и он не пустой (не пустой массив), используется columns из items
-    - Если в items для файла columns отсутствует или это пустой массив, используется columns из defaults
+    - Если в items для файла columns отсутствует или это пустой массив:
+      - Если use_defaults=True, используется columns из defaults
+      - Если use_defaults=False, возвращается пустой список
     
     Args:
         file_section: Секция files из настроек
-        file_key: Ключ файла ("current", "previous", "previous2")
+        file_key: Ключ файла ("current", "previous", "previous2", "single")
         defaults: Секция defaults из настроек
+        use_defaults: Использовать ли значения по умолчанию, если columns пустой (по умолчанию True)
     
     Returns:
         Список колонок для файла
@@ -405,30 +511,46 @@ def get_file_columns(file_section: Dict[str, Any], file_key: str, defaults: Dict
     meta = get_file_meta(file_section, file_key)
     if "columns" in meta and isinstance(meta["columns"], list) and len(meta["columns"]) > 0:
         return meta["columns"]
-    return defaults.get("columns", [])
+    if use_defaults:
+        return defaults.get("columns", [])
+    return []
 
 
-def get_file_filters(file_section: Dict[str, Any], file_key: str, defaults: Dict[str, Any]) -> Dict[str, Any]:
+def get_file_filters(file_section: Dict[str, Any], file_key: str, defaults: Dict[str, Any], use_defaults: bool = True) -> Dict[str, Any]:
     """Возвращает фильтры для конкретного файла.
     
     Логика:
     - Если в items для файла есть filters.drop_rules и он не пустой (не пустой массив), используется drop_rules из items
-    - Если в items для файла filters отсутствует или filters.drop_rules пустой массив, используется drop_rules из defaults
+    - Если в items для файла filters отсутствует или filters.drop_rules пустой массив:
+      - Если use_defaults=True, используется drop_rules из defaults
+      - Если use_defaults=False, возвращается пустой словарь с пустыми drop_rules
     
     Args:
         file_section: Секция files из настроек
-        file_key: Ключ файла ("current", "previous", "previous2")
+        file_key: Ключ файла ("current", "previous", "previous2", "single")
         defaults: Секция defaults из настроек
+        use_defaults: Использовать ли значения по умолчанию, если drop_rules пустой (по умолчанию True)
     
     Returns:
-        Словарь с фильтрами для файла
+        Словарь с фильтрами для файла (включая drop_rules и in_rules)
     """
     meta = get_file_meta(file_section, file_key)
     if "filters" in meta and isinstance(meta["filters"], dict):
         drop_rules = meta["filters"].get("drop_rules", [])
         if isinstance(drop_rules, list) and len(drop_rules) > 0:
-            return meta["filters"]
-    return {"drop_rules": defaults.get("drop_rules", [])}
+            # Возвращаем фильтры из items (включая in_rules, если есть)
+            result = {"drop_rules": drop_rules}
+            if "in_rules" in meta["filters"]:
+                result["in_rules"] = meta["filters"]["in_rules"]
+            else:
+                result["in_rules"] = []
+            return result
+    
+    # Если drop_rules пустой или отсутствует
+    if use_defaults:
+        return {"drop_rules": defaults.get("drop_rules", []), "in_rules": []}
+    else:
+        return {"drop_rules": [], "in_rules": []}
 
 
 def parse_contest_date(contest_date: str) -> str:
@@ -1110,6 +1232,78 @@ class DataLoader:
             func_name="read_source_file",
         )
         return cleaned
+    
+    def apply_in_rules(
+        self,
+        df: pd.DataFrame,
+        in_rules: List[Dict[str, Any]],
+    ) -> pd.DataFrame:
+        """Применяет правила включения строк (IN фильтры).
+        
+        Строка попадает в результат только если она проходит ВСЕ условия из in_rules (И).
+        Условия применяются после drop_rules (исключается из DROP).
+        
+        Args:
+            df: DataFrame для фильтрации
+            in_rules: Список правил включения [{"alias": "column", "values": [...], "condition": "in" или "not_in"}]
+        
+        Returns:
+            DataFrame с отфильтрованными строками
+        """
+        if not in_rules:
+            return df
+        
+        filtered = df.copy()
+        
+        for rule in in_rules:
+            column = rule.get("alias")
+            if column not in filtered.columns:
+                log_debug(
+                    self.logger,
+                    f"Колонка {column} отсутствует в данных, пропускаем IN правило",
+                    class_name="DataLoader",
+                    func_name="apply_in_rules",
+                )
+                continue
+            
+            values = rule.get("values", [])
+            condition = rule.get("condition", "in")
+            
+            if not values:
+                continue
+            
+            # Нормализуем значения для сравнения
+            normalized_values = {str(v).strip().lower() for v in values}
+            
+            if condition == "in":
+                # Значение должно быть в списке
+                mask = filtered[column].apply(
+                    lambda x: str(x).strip().lower() in normalized_values if pd.notna(x) else False
+                )
+            elif condition == "not_in":
+                # Значение НЕ должно быть в списке
+                mask = filtered[column].apply(
+                    lambda x: str(x).strip().lower() not in normalized_values if pd.notna(x) else True
+                )
+            else:
+                log_debug(
+                    self.logger,
+                    f"Неизвестное условие '{condition}' в IN правиле для колонки {column}, пропускаем",
+                    class_name="DataLoader",
+                    func_name="apply_in_rules",
+                )
+                continue
+            
+            before = len(filtered)
+            filtered = filtered[mask]
+            log_debug(
+                self.logger,
+                f"Колонка {column} (IN правило, condition={condition}): оставлено {len(filtered)} из {before} строк",
+                class_name="DataLoader",
+                func_name="apply_in_rules",
+            )
+        
+        return filtered
     
     def drop_forbidden_rows(
         self,
@@ -2955,6 +3149,249 @@ def calculate_variant_2(
     return calculator.calculate(current_df, previous_df, previous2_df)
 
 
+def calculate_single_file_count(
+    df: pd.DataFrame,
+    defaults: Mapping[str, Any],
+    identifiers: Mapping[str, Any],
+    logger: Mapping[str, Any],
+) -> pd.DataFrame:
+    """Расчет по одному файлу: количество строк (сделок) для каждого ТН.
+    
+    Для каждого табельного номера считается количество строк в файле.
+    
+    Args:
+        df: DataFrame с данными одного файла
+        defaults: Настройки по умолчанию
+        identifiers: Настройки форматирования идентификаторов
+        logger: Логгер для записи сообщений
+    
+    Returns:
+        DataFrame с колонками: Таб. номер ВКО (выбранный), ВКО (выбранный), Количество_сделок
+    """
+    log_info(logger, "Расчет по одному файлу: количество сделок для каждого ТН")
+    
+    # Группируем по manager_id и считаем количество строк
+    result = df.groupby("manager_id", as_index=False).agg({
+        "manager_name": "first",  # Берем первое значение ФИО
+        "fact_value_clean": "count",  # Считаем количество строк
+    }).rename(columns={
+        "manager_id": SELECTED_MANAGER_ID_COL,
+        "manager_name": SELECTED_MANAGER_NAME_COL,
+        "fact_value_clean": "Количество_сделок",
+    })
+    
+    log_info(logger, f"Найдено {len(result)} уникальных ТН, всего сделок: {result['Количество_сделок'].sum()}")
+    return result
+
+
+def calculate_single_file_max(
+    df: pd.DataFrame,
+    defaults: Mapping[str, Any],
+    identifiers: Mapping[str, Any],
+    logger: Mapping[str, Any],
+) -> pd.DataFrame:
+    """Расчет по одному файлу: максимальная сумма среди строк для каждого КМ.
+    
+    Для каждого табельного номера находится максимальная сумма fact_value_clean среди всех строк.
+    
+    Args:
+        df: DataFrame с данными одного файла
+        defaults: Настройки по умолчанию
+        identifiers: Настройки форматирования идентификаторов
+        logger: Логгер для записи сообщений
+    
+    Returns:
+        DataFrame с колонками: Таб. номер ВКО (выбранный), ВКО (выбранный), Максимальная_сумма
+    """
+    log_info(logger, "Расчет по одному файлу: максимальная сумма для каждого КМ")
+    
+    # Группируем по manager_id и находим максимальную сумму
+    result = df.groupby("manager_id", as_index=False).agg({
+        "manager_name": "first",  # Берем первое значение ФИО
+        "fact_value_clean": "max",  # Находим максимальную сумму
+    }).rename(columns={
+        "manager_id": SELECTED_MANAGER_ID_COL,
+        "manager_name": SELECTED_MANAGER_NAME_COL,
+        "fact_value_clean": "Максимальная_сумма",
+    })
+    
+    log_info(logger, f"Найдено {len(result)} уникальных ТН")
+    return result
+
+
+def calculate_new_clients(
+    files_2025: List[pd.DataFrame],
+    files_2024: List[pd.DataFrame],
+    key_mode: str,
+    include_tb: bool,
+    defaults: Mapping[str, Any],
+    identifiers: Mapping[str, Any],
+    logger: Mapping[str, Any],
+) -> pd.DataFrame:
+    """Расчет новых клиентов: ИНН с суммой факта в 2025 > 0, но сумма факта в 2024 = 0 или его нет.
+    
+    Логика:
+    - Для каждого ИНН суммируем факт по всем файлам 2025 года
+    - Для каждого ИНН суммируем факт по всем файлам 2024 года
+    - Находим ИНН, где сумма 2025 > 0 и сумма 2024 = 0 или его нет
+    - Агрегируем по ТН (с учетом ТБ, если нужно)
+    - Выводим: сумма 2024, сумма 2025, количество месяцев с суммой в 2024, количество месяцев с суммой в 2025
+    
+    Args:
+        files_2025: Список DataFrame с данными файлов 2025 года (12 файлов)
+        files_2024: Список DataFrame с данными файлов 2024 года (12 файлов)
+        key_mode: Режим агрегации ("manager" или "client")
+        include_tb: Учитывать ли ТБ при расчете
+        defaults: Настройки по умолчанию
+        identifiers: Настройки форматирования идентификаторов
+        logger: Логгер для записи сообщений
+    
+    Returns:
+        DataFrame с колонками: Таб. номер ВКО (выбранный), ВКО (выбранный), ТБ (если include_tb),
+        Сумма_2024, Сумма_2025, Месяцев_с_суммой_2024, Месяцев_с_суммой_2025
+    """
+    log_info(logger, "Расчет новых клиентов: поиск ИНН с фактом в 2025, но без факта в 2024")
+    
+    # Объединяем все файлы 2025 года
+    if files_2025:
+        df_2025_all = pd.concat(files_2025, ignore_index=True)
+    else:
+        df_2025_all = pd.DataFrame()
+    
+    # Объединяем все файлы 2024 года
+    if files_2024:
+        df_2024_all = pd.concat(files_2024, ignore_index=True)
+    else:
+        df_2024_all = pd.DataFrame()
+    
+    # Определяем ключи для агрегации
+    if key_mode == "client":
+        if include_tb:
+            agg_keys = ["client_id", "tb"]
+        else:
+            agg_keys = ["client_id"]
+    else:
+        agg_keys = ["manager_id"]
+    
+    # Агрегируем по ИНН (или ТН) для 2025 года
+    if not df_2025_all.empty:
+        # Считаем сумму факта для каждого ИНН
+        agg_dict = {
+            "fact_value_clean": "sum",
+        }
+        if key_mode == "client":
+            agg_dict["manager_id"] = "last"
+            agg_dict["manager_name"] = "last"
+            if include_tb:
+                agg_dict["tb"] = "last"
+        
+        agg_2025 = df_2025_all.groupby(agg_keys, as_index=False).agg(agg_dict)
+        agg_2025["Сумма_2025"] = agg_2025["fact_value_clean"]
+        
+        # Считаем количество месяцев с суммой > 0 для каждого ИНН
+        # Для этого нужно посчитать по каждому файлу отдельно
+        months_with_sum_2025 = []
+        for df_file in files_2025:
+            if not df_file.empty:
+                file_agg = df_file.groupby(agg_keys, as_index=False).agg({"fact_value_clean": "sum"})
+                file_agg["has_sum"] = (file_agg["fact_value_clean"] > 0).astype(int)
+                months_with_sum_2025.append(file_agg[agg_keys + ["has_sum"]])
+        
+        if months_with_sum_2025:
+            months_df = pd.concat(months_with_sum_2025, ignore_index=True)
+            months_count = months_df.groupby(agg_keys, as_index=False).agg({"has_sum": "sum"})
+            months_count = months_count.rename(columns={"has_sum": "Месяцев_с_суммой_2025"})
+            agg_2025 = pd.merge(agg_2025, months_count, on=agg_keys, how="left")
+            agg_2025["Месяцев_с_суммой_2025"] = agg_2025["Месяцев_с_суммой_2025"].fillna(0).astype(int)
+        else:
+            agg_2025["Месяцев_с_суммой_2025"] = 0
+        
+        agg_2025 = agg_2025.drop(columns=["fact_value_clean"])
+    else:
+        agg_2025 = pd.DataFrame(columns=agg_keys + ["Сумма_2025", "Месяцев_с_суммой_2025"])
+        if key_mode == "client":
+            agg_2025["manager_id"] = []
+            agg_2025["manager_name"] = []
+            if include_tb:
+                agg_2025["tb"] = []
+    
+    # Агрегируем по ИНН (или ТН) для 2024 года
+    if not df_2024_all.empty:
+        # Считаем сумму факта для каждого ИНН
+        agg_2024 = df_2024_all.groupby(agg_keys, as_index=False).agg({"fact_value_clean": "sum"})
+        agg_2024["Сумма_2024"] = agg_2024["fact_value_clean"]
+        
+        # Считаем количество месяцев с суммой > 0 для каждого ИНН
+        months_with_sum_2024 = []
+        for df_file in files_2024:
+            if not df_file.empty:
+                file_agg = df_file.groupby(agg_keys, as_index=False).agg({"fact_value_clean": "sum"})
+                file_agg["has_sum"] = (file_agg["fact_value_clean"] > 0).astype(int)
+                months_with_sum_2024.append(file_agg[agg_keys + ["has_sum"]])
+        
+        if months_with_sum_2024:
+            months_df = pd.concat(months_with_sum_2024, ignore_index=True)
+            months_count = months_df.groupby(agg_keys, as_index=False).agg({"has_sum": "sum"})
+            months_count = months_count.rename(columns={"has_sum": "Месяцев_с_суммой_2024"})
+            agg_2024 = pd.merge(agg_2024, months_count, on=agg_keys, how="left")
+            agg_2024["Месяцев_с_суммой_2024"] = agg_2024["Месяцев_с_суммой_2024"].fillna(0).astype(int)
+        else:
+            agg_2024["Месяцев_с_суммой_2024"] = 0
+        
+        agg_2024 = agg_2024.drop(columns=["fact_value_clean"])
+    else:
+        agg_2024 = pd.DataFrame(columns=agg_keys + ["Сумма_2024", "Месяцев_с_суммой_2024"])
+    
+    # Объединяем данные 2025 и 2024
+    if key_mode == "client":
+        # Для client_id объединяем по ИНН
+        merged = pd.merge(agg_2025, agg_2024, on=agg_keys, how="left", suffixes=("", "_2024"))
+        merged["Сумма_2024"] = merged["Сумма_2024"].fillna(0.0)
+        merged["Месяцев_с_суммой_2024"] = merged["Месяцев_с_суммой_2024"].fillna(0)
+        
+        # Фильтруем: сумма 2025 > 0 и сумма 2024 = 0
+        new_clients = merged[(merged["Сумма_2025"] > 0) & (merged["Сумма_2024"] == 0)].copy()
+        
+        # Агрегируем по ТН (с учетом ТБ, если нужно)
+        if include_tb:
+            group_keys = ["manager_id", "tb"]
+        else:
+            group_keys = ["manager_id"]
+        
+        result = new_clients.groupby(group_keys, as_index=False).agg({
+            "manager_name": "first",
+            "Сумма_2024": "sum",
+            "Сумма_2025": "sum",
+            "Месяцев_с_суммой_2024": "sum",
+            "Месяцев_с_суммой_2025": "sum",
+        })
+        
+        rename_map = {
+            "manager_id": SELECTED_MANAGER_ID_COL,
+            "manager_name": SELECTED_MANAGER_NAME_COL,
+        }
+        if include_tb:
+            rename_map["tb"] = "ТБ"
+        result = result.rename(columns=rename_map)
+    else:
+        # Для manager_id объединяем по ТН
+        merged = pd.merge(agg_2025, agg_2024, on=agg_keys, how="left", suffixes=("", "_2024"))
+        merged["Сумма_2024"] = merged["Сумма_2024"].fillna(0.0)
+        merged["Месяцев_с_суммой_2024"] = merged["Месяцев_с_суммой_2024"].fillna(0)
+        
+        # Фильтруем: сумма 2025 > 0 и сумма 2024 = 0
+        result = merged[(merged["Сумма_2025"] > 0) & (merged["Сумма_2024"] == 0)].copy()
+        
+        rename_map = {
+            "manager_id": SELECTED_MANAGER_ID_COL,
+            "manager_name": SELECTED_MANAGER_NAME_COL,
+        }
+        result = result.rename(columns=rename_map)
+    
+    log_info(logger, f"Найдено {len(result)} уникальных ТН с новыми клиентами")
+    return result
+
+
 def calculate_variant_3(
     current_df: pd.DataFrame,
     previous_df: pd.DataFrame,
@@ -3227,16 +3664,16 @@ def process_project(project_root: Path) -> None:
     
     # Получаем параметры основного расчета для определения количества файлов
     main_calc_config = settings.get("main_calculation", {})
-    use_files_count = main_calc_config.get("use_files_count", 2)
+    use_files_count = main_calc_config.get("use_files_count", "two")
     
-    if use_files_count not in [2, 3]:
-        error_msg = f"Некорректное значение use_files_count: {use_files_count}. Допустимые значения: 2 или 3"
+    if use_files_count not in ["one", "two", "three", "new"]:
+        error_msg = f"Некорректное значение use_files_count: {use_files_count}. Допустимые значения: 'one', 'two', 'three' или 'new'"
         print(f"ОШИБКА: {error_msg}")
         log_info(logger, error_msg)
         return
     
     # Определяем необходимость использования T-2 на основе параметра
-    use_t2 = (use_files_count == 3)
+    use_t2 = (use_files_count == "three")
 
     input_dir = project_root / "IN"
     output_dir = project_root / "OUT"
@@ -3284,18 +3721,34 @@ def process_project(project_root: Path) -> None:
 
         # Проверяем наличие необходимых файлов в зависимости от use_files_count
         missing_files = []
-        if not current_file.exists():
-            missing_files.append(f"T-0 (current): {current_meta['file_name']}")
-        if not previous_file.exists():
-            missing_files.append(f"T-1 (previous): {previous_meta['file_name']}")
         
-        if use_files_count == 3:
-            if previous2_meta is None:
-                missing_files.append("T-2 (previous2): не указан в настройках")
-            else:
-                previous2_file = input_dir / previous2_meta["file_name"]
-                if not previous2_file.exists():
-                    missing_files.append(f"T-2 (previous2): {previous2_meta['file_name']}")
+        if use_files_count == "one":
+            # Для одного файла проверяем single_file настройки
+            single_file_config = main_calc_config.get("single_file", {})
+            single_file_name = single_file_config.get("file_name", "").strip()
+            if not single_file_name:
+                error_msg = "Для use_files_count='one' необходимо указать single_file.file_name в настройках"
+                print(f"ОШИБКА: {error_msg}")
+                log_info(logger, error_msg)
+                return
+            
+            single_file_path = input_dir / single_file_name
+            if not single_file_path.exists():
+                missing_files.append(f"Один файл (single_file): {single_file_name}")
+        else:
+            # Для двух и трех файлов проверяем current и previous
+            if not current_file.exists():
+                missing_files.append(f"T-0 (current): {current_meta['file_name']}")
+            if not previous_file.exists():
+                missing_files.append(f"T-1 (previous): {previous_meta['file_name']}")
+            
+            if use_files_count == "three":
+                if previous2_meta is None:
+                    missing_files.append("T-2 (previous2): не указан в настройках")
+                else:
+                    previous2_file = input_dir / previous2_meta["file_name"]
+                    if not previous2_file.exists():
+                        missing_files.append(f"T-2 (previous2): {previous2_meta['file_name']}")
         
         if missing_files:
             error_msg = (
@@ -3309,35 +3762,6 @@ def process_project(project_root: Path) -> None:
         # Инициализируем загрузчик данных
         data_loader = DataLoader(identifiers, logger)
         
-        # Загружаем файлы T-0 и T-1
-        current_df = data_loader.read_source_file(
-            current_file,
-            sheet_current,
-            current_columns,
-            current_drop_rules,
-        )
-        previous_df = data_loader.read_source_file(
-            previous_file,
-            sheet_previous,
-            previous_columns,
-            previous_drop_rules,
-        )
-        
-        # Загружаем T-2, если требуется
-        previous2_df = None
-        if use_t2:
-            previous2_file = input_dir / previous2_meta["file_name"]
-            previous2_columns = get_file_columns(file_section, "previous2", defaults)
-            previous2_filters = get_file_filters(file_section, "previous2", defaults)
-            previous2_drop_rules = build_drop_rules(previous2_filters.get("drop_rules", []))
-            previous2_df = data_loader.read_source_file(
-                previous2_file,
-                resolve_sheet_name(file_section, "previous2"),
-                previous2_columns,
-                previous2_drop_rules,
-            )
-            log_info(logger, f"Загружен файл T-2: {previous2_meta['file_name']}")
-
         # Получаем параметры основного расчета и процентиля (use_files_count уже получен выше)
         percentile_calc_config = settings.get("percentile_calculation", {})
         
@@ -3347,63 +3771,271 @@ def process_project(project_root: Path) -> None:
         if not percentile_calc_config:
             raise ValueError("Блок 'percentile_calculation' не найден в настройках")
         
-        # Получаем параметры основного расчета
-        key_mode = main_calc_config.get("key_mode", "client")
-        include_tb = main_calc_config.get("include_tb", False)
-        
-        log_info(logger, f"Параметры основного расчета: key_mode={key_mode}, include_tb={include_tb}")
-        
-        # Рассчитываем основной свод в зависимости от параметров
-        variant_df_for_client_summary = None
-        
-        if key_mode == "manager":
-            # Расчет по КМ (manager_id), без учета ТБ
-            selected_summary = calculate_variant_1(
-                current_df, previous_df, previous2_df if use_t2 else None,
-                defaults, identifiers, logger
+        # Обработка одного файла
+        if use_files_count == "one":
+            # Получаем параметры для одного файла
+            one_file_config = main_calc_config.get("one_file", {})
+            calculation_type = one_file_config.get("calculation_type", "count")
+            
+            # Получаем настройки из files.items с key="single" (НЕ используем defaults)
+            single_meta = get_file_meta(file_section, "single")
+            single_file_name = single_meta.get("file_name", "").strip()
+            
+            if not single_file_name:
+                error_msg = "Для use_files_count='one' необходимо указать file_name в files.items с key='single'"
+                print(f"ОШИБКА: {error_msg}")
+                log_info(logger, error_msg)
+                return
+            
+            single_file_columns = get_file_columns(file_section, "single", defaults, use_defaults=False)
+            single_file_filters = get_file_filters(file_section, "single", defaults, use_defaults=False)
+            single_file_sheet = resolve_sheet_name(file_section, "single")
+            single_file_drop_rules = build_drop_rules(single_file_filters.get("drop_rules", []))
+            single_file_in_rules = single_file_filters.get("in_rules", [])
+            
+            single_file_path = input_dir / single_file_name
+            
+            # Загружаем один файл
+            single_df = data_loader.read_source_file(
+                single_file_path,
+                single_file_sheet,
+                single_file_columns,
+                single_file_drop_rules,
             )
-            tb_column = None
-        elif key_mode == "client":
-            if include_tb:
-                # Расчет по ИНН (client_id), с учетом ТБ
-                aggregator = Aggregator(defaults, identifiers, logger)
-                variant_df_for_client_summary = aggregator.assemble_variant_dataset_with_t2(
-                    variant_name="ИНН_сТБ",
-                    key_columns=["client_id", "tb"],
-                    current_df=current_df,
-                    previous_df=previous_df,
-                    previous2_df=previous2_df if use_t2 else None,
+            
+            # Применяем IN фильтры
+            if single_file_in_rules:
+                single_df = data_loader.apply_in_rules(single_df, single_file_in_rules)
+                log_info(logger, f"После применения IN фильтров осталось строк: {len(single_df)}")
+            
+            if calculation_type == "count":
+                # Количество строк (сделок) для каждого ТН
+                selected_summary = calculate_single_file_count(
+                    single_df, defaults, identifiers, logger
                 )
-                selected_summary = calculate_variant_3(
-                    current_df, previous_df, previous2_df if use_t2 else None,
-                    defaults, identifiers, logger
+                value_column = "Количество_сделок"
+            elif calculation_type == "max":
+                # Максимальная сумма среди строк для каждого КМ
+                selected_summary = calculate_single_file_max(
+                    single_df, defaults, identifiers, logger
                 )
-                tb_column = "ТБ"
+                value_column = "Максимальная_сумма"
             else:
-                # Расчет по ИНН (client_id), без учета ТБ
-                aggregator = Aggregator(defaults, identifiers, logger)
-                variant_df_for_client_summary = aggregator.assemble_variant_dataset_with_t2(
-                    variant_name="ИНН_безТБ",
-                    key_columns=["client_id"],
-                    current_df=current_df,
-                    previous_df=previous_df,
-                    previous2_df=previous2_df if use_t2 else None,
+                raise ValueError(f"Неизвестный calculation_type: {calculation_type}. Допустимые значения: 'count' или 'max'")
+            
+            tb_column = None
+            variant_df_for_client_summary = None
+            current_df = single_df  # Для маппинга ТБ и ГОСБ
+            previous_df = pd.DataFrame()  # Пустой для маппинга
+            
+        elif use_files_count == "new":
+            # Загружаем 24 файла (12 для 2025 и 12 для 2024)
+            files_2025 = []
+            files_2024 = []
+            
+            # Получаем параметры для нового варианта
+            new_files_config = main_calc_config.get("new_files", {})
+            key_mode = new_files_config.get("key_mode", "client")
+            include_tb = new_files_config.get("include_tb", False)
+            
+            log_info(logger, f"Загрузка файлов для нового варианта расчета: key_mode={key_mode}, include_tb={include_tb}")
+            
+            # Загружаем файлы 2025 года
+            for i in range(12):
+                file_key = f"2025_T-{i}"
+                try:
+                    file_meta = get_file_meta(file_section, file_key)
+                    file_name = file_meta.get("file_name", "").strip()
+                    if file_name:
+                        file_path = input_dir / file_name
+                        if file_path.exists():
+                            file_columns = get_file_columns(file_section, file_key, defaults)
+                            file_filters = get_file_filters(file_section, file_key, defaults)
+                            file_drop_rules = build_drop_rules(file_filters.get("drop_rules", []))
+                            file_sheet = resolve_sheet_name(file_section, file_key)
+                            
+                            df = data_loader.read_source_file(
+                                file_path,
+                                file_sheet,
+                                file_columns,
+                                file_drop_rules,
+                            )
+                            files_2025.append(df)
+                            log_info(logger, f"Загружен файл 2025_T-{i}: {file_name}")
+                        else:
+                            log_info(logger, f"Файл 2025_T-{i} не найден: {file_name}, пропускаем")
+                    else:
+                        log_info(logger, f"Имя файла для 2025_T-{i} не указано, пропускаем")
+                except KeyError:
+                    log_info(logger, f"Конфигурация для 2025_T-{i} не найдена, пропускаем")
+            
+            # Загружаем файлы 2024 года
+            for i in range(12):
+                file_key = f"2024_T-{i}"
+                try:
+                    file_meta = get_file_meta(file_section, file_key)
+                    file_name = file_meta.get("file_name", "").strip()
+                    if file_name:
+                        file_path = input_dir / file_name
+                        if file_path.exists():
+                            file_columns = get_file_columns(file_section, file_key, defaults)
+                            file_filters = get_file_filters(file_section, file_key, defaults)
+                            file_drop_rules = build_drop_rules(file_filters.get("drop_rules", []))
+                            file_sheet = resolve_sheet_name(file_section, file_key)
+                            
+                            df = data_loader.read_source_file(
+                                file_path,
+                                file_sheet,
+                                file_columns,
+                                file_drop_rules,
+                            )
+                            files_2024.append(df)
+                            log_info(logger, f"Загружен файл 2024_T-{i}: {file_name}")
+                        else:
+                            log_info(logger, f"Файл 2024_T-{i} не найден: {file_name}, пропускаем")
+                    else:
+                        log_info(logger, f"Имя файла для 2024_T-{i} не указано, пропускаем")
+                except KeyError:
+                    log_info(logger, f"Конфигурация для 2024_T-{i} не найдена, пропускаем")
+            
+            log_info(logger, f"Загружено файлов 2025: {len(files_2025)}, файлов 2024: {len(files_2024)}")
+            
+            # Рассчитываем новых клиентов
+            selected_summary = calculate_new_clients(
+                files_2025,
+                files_2024,
+                key_mode,
+                include_tb,
+                defaults,
+                identifiers,
+                logger,
+            )
+            
+            value_column = "Сумма_2025"
+            tb_column = "ТБ" if include_tb else None
+            variant_df_for_client_summary = None
+            
+            # Для маппинга ТБ и ГОСБ используем первый доступный файл 2025
+            if files_2025:
+                current_df = files_2025[0]
+            else:
+                current_df = pd.DataFrame()
+            previous_df = pd.DataFrame()  # Пустой для маппинга
+            
+        else:
+            # Загружаем файлы T-0 и T-1
+            current_df = data_loader.read_source_file(
+                current_file,
+                sheet_current,
+                current_columns,
+                current_drop_rules,
+            )
+            previous_df = data_loader.read_source_file(
+                previous_file,
+                sheet_previous,
+                previous_columns,
+                previous_drop_rules,
+            )
+            
+            # Загружаем T-2, если требуется
+            previous2_df = None
+            if use_t2:
+                previous2_file = input_dir / previous2_meta["file_name"]
+                previous2_columns = get_file_columns(file_section, "previous2", defaults)
+                previous2_filters = get_file_filters(file_section, "previous2", defaults)
+                previous2_drop_rules = build_drop_rules(previous2_filters.get("drop_rules", []))
+                previous2_df = data_loader.read_source_file(
+                    previous2_file,
+                    resolve_sheet_name(file_section, "previous2"),
+                    previous2_columns,
+                    previous2_drop_rules,
                 )
-                selected_summary = calculate_variant_2(
+                log_info(logger, f"Загружен файл T-2: {previous2_meta['file_name']}")
+            
+            # Получаем параметры основного расчета в зависимости от количества файлов
+            if use_files_count == "two":
+                two_files_config = main_calc_config.get("two_files", {})
+                key_mode = two_files_config.get("key_mode", "client")
+                include_tb = two_files_config.get("include_tb", False)
+            elif use_files_count == "three":
+                three_files_config = main_calc_config.get("three_files", {})
+                key_mode = three_files_config.get("key_mode", "client")
+                include_tb = three_files_config.get("include_tb", False)
+            elif use_files_count == "new":
+                new_files_config = main_calc_config.get("new_files", {})
+                key_mode = new_files_config.get("key_mode", "client")
+                include_tb = new_files_config.get("include_tb", False)
+            else:
+                raise ValueError(f"Неизвестный use_files_count: {use_files_count}")
+            
+            log_info(logger, f"Параметры основного расчета: key_mode={key_mode}, include_tb={include_tb}")
+            
+            # Рассчитываем основной свод в зависимости от параметров
+            variant_df_for_client_summary = None
+            
+            if key_mode == "manager":
+                # Расчет по КМ (manager_id), без учета ТБ
+                selected_summary = calculate_variant_1(
                     current_df, previous_df, previous2_df if use_t2 else None,
                     defaults, identifiers, logger
                 )
                 tb_column = None
-        else:
-            raise ValueError(f"Неизвестный key_mode: {key_mode}. Допустимые значения: 'manager' или 'client'")
+            elif key_mode == "client":
+                if include_tb:
+                    # Расчет по ИНН (client_id), с учетом ТБ
+                    aggregator = Aggregator(defaults, identifiers, logger)
+                    variant_df_for_client_summary = aggregator.assemble_variant_dataset_with_t2(
+                        variant_name="ИНН_сТБ",
+                        key_columns=["client_id", "tb"],
+                        current_df=current_df,
+                        previous_df=previous_df,
+                        previous2_df=previous2_df if use_t2 else None,
+                    )
+                    selected_summary = calculate_variant_3(
+                        current_df, previous_df, previous2_df if use_t2 else None,
+                        defaults, identifiers, logger
+                    )
+                    tb_column = "ТБ"
+                else:
+                    # Расчет по ИНН (client_id), без учета ТБ
+                    aggregator = Aggregator(defaults, identifiers, logger)
+                    variant_df_for_client_summary = aggregator.assemble_variant_dataset_with_t2(
+                        variant_name="ИНН_безТБ",
+                        key_columns=["client_id"],
+                        current_df=current_df,
+                        previous_df=previous_df,
+                        previous2_df=previous2_df if use_t2 else None,
+                    )
+                    selected_summary = calculate_variant_2(
+                        current_df, previous_df, previous2_df if use_t2 else None,
+                        defaults, identifiers, logger
+                    )
+                    tb_column = None
+            else:
+                raise ValueError(f"Неизвестный key_mode: {key_mode}. Допустимые значения: 'manager' или 'client'")
+            
+            value_column = "Прирост"
         
         # Объединяем SUMMARY_TN и PERCENTILE_TN в один лист
         # Сначала данные по расчету приростов, затем процентили
         summary_tn_combined = selected_summary.copy()
         
         # Добавляем ТБ и ГОСБ для каждого табельного номера (нужно для расчета процентилей)
-        manager_tb_mapping = build_manager_tb_mapping(current_df, previous_df)
-        manager_gosb_mapping = build_manager_gosb_mapping(current_df, previous_df)
+        if use_files_count == "one":
+            # Для одного файла используем только current_df
+            manager_tb_mapping = build_manager_tb_mapping(current_df, pd.DataFrame())
+            manager_gosb_mapping = build_manager_gosb_mapping(current_df, pd.DataFrame())
+        elif use_files_count == "new":
+            # Для нового варианта используем первый доступный файл 2025
+            if not current_df.empty:
+                manager_tb_mapping = build_manager_tb_mapping(current_df, pd.DataFrame())
+                manager_gosb_mapping = build_manager_gosb_mapping(current_df, pd.DataFrame())
+            else:
+                manager_tb_mapping = {}
+                manager_gosb_mapping = {}
+        else:
+            manager_tb_mapping = build_manager_tb_mapping(current_df, previous_df)
+            manager_gosb_mapping = build_manager_gosb_mapping(current_df, previous_df)
         
         # Добавляем ТБ и ГОСБ к summary_tn_combined
         summary_tn_combined["ТБ"] = summary_tn_combined[SELECTED_MANAGER_ID_COL].map(manager_tb_mapping).fillna("")
@@ -3432,7 +4064,7 @@ def process_project(project_root: Path) -> None:
         # Используем summary_tn_combined, который уже содержит ТБ и ГОСБ
         selected_percentile = percentile_calc.append_percentile_columns(
             summary_tn_combined,
-            value_column="Прирост",
+            value_column=value_column,  # Используем правильную колонку в зависимости от типа расчета
             tb_column=percentile_tb_column,
             gosb_column=percentile_gosb_column,
             percentile_filter=percentile_filter,
@@ -3445,10 +4077,18 @@ def process_project(project_root: Path) -> None:
             summary_tn_combined[col] = selected_percentile[col]
         
         # Переупорядочиваем колонки: сначала расчеты, потом процентили
-        base_columns = [SELECTED_MANAGER_ID_COL, SELECTED_MANAGER_NAME_COL, "ТБ", "ГОСБ", 
-                       "Факт_T0", "Факт_T1", "Прирост"]
-        if "Количество записей" in summary_tn_combined.columns:
-            base_columns.append("Количество записей")
+        if use_files_count == "one":
+            # Для одного файла базовые колонки зависят от типа расчета
+            base_columns = [SELECTED_MANAGER_ID_COL, SELECTED_MANAGER_NAME_COL, "ТБ", "ГОСБ", value_column]
+        elif use_files_count == "new":
+            # Для нового варианта базовые колонки: сумма 2024, сумма 2025, месяцы
+            base_columns = [SELECTED_MANAGER_ID_COL, SELECTED_MANAGER_NAME_COL, "ТБ", "ГОСБ",
+                           "Сумма_2024", "Сумма_2025", "Месяцев_с_суммой_2024", "Месяцев_с_суммой_2025"]
+        else:
+            base_columns = [SELECTED_MANAGER_ID_COL, SELECTED_MANAGER_NAME_COL, "ТБ", "ГОСБ", 
+                           "Факт_T0", "Факт_T1", "Прирост"]
+            if "Количество записей" in summary_tn_combined.columns:
+                base_columns.append("Количество записей")
         percentile_cols = [col for col in percentile_columns if col not in base_columns]
         summary_tn_combined = summary_tn_combined[base_columns + percentile_cols]
         
@@ -3457,9 +4097,9 @@ def process_project(project_root: Path) -> None:
         summary_tn = summary_tn_combined.copy()
         percentile_tn = summary_tn_combined.copy()  # Оба содержат процентили
         
-        # Создаём свод по ИНН для вариантов 2 и 3 (где key_mode="client")
+        # Создаём свод по ИНН для вариантов 2 и 3 (где key_mode="client" и use_files_count не "one" и не "new")
         client_summary_inn = None
-        if key_mode == "client" and variant_df_for_client_summary is not None:
+        if use_files_count not in ["one", "new"] and key_mode == "client" and variant_df_for_client_summary is not None:
             client_summary_inn = build_client_summary_by_inn(
                 variant_df=variant_df_for_client_summary,
                 current_df=current_df,
@@ -3609,7 +4249,13 @@ def process_project(project_root: Path) -> None:
                 sort_column = None
                 
                 if sheet_name == "SUMMARY_TN":
-                    sort_column = "Прирост"
+                    # Для одного файла используем value_column, для нового варианта - "Сумма_2025", для двух/трех - "Прирост"
+                    if use_files_count == "one":
+                        sort_column = value_column
+                    elif use_files_count == "new":
+                        sort_column = "Сумма_2025"
+                    else:
+                        sort_column = "Прирост"
                 elif sheet_name == "SUMMARY_INN":
                     sort_column = "Прирост"
                 elif sheet_name in ["SPOD_SCENARIO", "SPOD_SCENARIO_PERCENTILE"]:
