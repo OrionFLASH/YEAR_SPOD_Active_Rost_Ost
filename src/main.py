@@ -233,9 +233,9 @@ def build_settings_tree() -> SettingsTree:
                     #     - percentile_type из варианта процентиля НЕ используется
                     #     - Используется для выгрузки фактических значений прироста
                     #   "scenario_percentile" - использует данные из SUMMARY_TN с процентилями (PERCENTILE_TN)
-                    #     - FACT_VALUE берется из percentile_type выбранного варианта процентиля:
-                    #       * если percentile_type="обогнал" → FACT_VALUE = Обогнал_всего_%
-                    #       * если percentile_type="обогнали" → FACT_VALUE = Обогнали_меня_всего_%
+                    #     - FACT_VALUE берется из percentile_type настроек процентиля:
+                    #       * если percentile_type="above" → FACT_VALUE = Обогнал_всего_%
+                    #       * если percentile_type="below" → FACT_VALUE = Обогнали_меня_всего_%
                     #     - В Excel добавляются процентильные колонки: Обогнал_всего_кол, Обогнали_меня_всего_кол, Равных_всего_кол, Всего_КМ_всего
                     #     - percentile_type берется из variants.active_percentile_variant
                     #     - Используется для выгрузки процентильных метрик
@@ -260,9 +260,9 @@ def build_settings_tree() -> SettingsTree:
                     #     - percentile_type из варианта процентиля НЕ используется
                     #     - Используется для выгрузки фактических значений прироста
                     #   "scenario_percentile" - использует данные из SUMMARY_TN с процентилями (PERCENTILE_TN)
-                    #     - FACT_VALUE берется из percentile_type выбранного варианта процентиля:
-                    #       * если percentile_type="обогнал" → FACT_VALUE = Обогнал_всего_%
-                    #       * если percentile_type="обогнали" → FACT_VALUE = Обогнали_меня_всего_%
+                    #     - FACT_VALUE берется из percentile_type настроек процентиля:
+                    #       * если percentile_type="above" → FACT_VALUE = Обогнал_всего_%
+                    #       * если percentile_type="below" → FACT_VALUE = Обогнали_меня_всего_%
                     #     - В Excel добавляются процентильные колонки: Обогнал_всего_кол, Обогнали_меня_всего_кол, Равных_всего_кол, Всего_КМ_всего
                     #     - percentile_type берется из variants.active_percentile_variant
                     #     - Используется для выгрузки процентильных метрик
@@ -293,9 +293,9 @@ def build_settings_tree() -> SettingsTree:
         "percentile_calculation": {
             # Параметры расчета процентиля (кто кого обогнал)
             # percentile_type: тип процентиля
-            #   "обогнал" - рассчитывается процент КМ с меньшим результатом (кого я обогнал)
-            #   "обогнали" - рассчитывается процент КМ с большим результатом (кто меня обогнал)
-            "percentile_type": "обогнал",  # "обогнал" или "обогнали"
+            #   "above" - рассчитывается процент КМ с меньшим результатом (кого я обогнал, кто ниже меня)
+            #   "below" - рассчитывается процент КМ с большим результатом (кто меня обогнал, кто выше меня)
+            "percentile_type": "above",  # "above" или "below"
             # percentile_group_by: уровень группировки для расчета процентиля
             #   "all" - сравнение среди всех КМ
             #   "tb" - сравнение только среди КМ с тем же ТБ
@@ -3326,7 +3326,7 @@ def process_project(project_root: Path) -> None:
         percentile_calc = PercentileCalculator()
         
         # Получаем параметры расчета процентиля
-        percentile_type = percentile_calc_config.get("percentile_type", "обогнал")
+        percentile_type = percentile_calc_config.get("percentile_type", "above")
         percentile_group_by = percentile_calc_config.get("percentile_group_by", "all")
         percentile_filter = percentile_calc_config.get("percentile_filter", "all")
         
@@ -3422,9 +3422,9 @@ def process_project(project_root: Path) -> None:
                     percentile_value_type = None
                 
                 if percentile_value_type:
-                    if percentile_value_type == "обогнал":
+                    if percentile_value_type == "above":
                         percentile_value_column = "Обогнал_всего_%"
-                    elif percentile_value_type == "обогнали":
+                    elif percentile_value_type == "below":
                         percentile_value_column = "Обогнали_меня_всего_%"
                     else:
                         log_debug(
