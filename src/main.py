@@ -289,6 +289,10 @@ def build_settings_tree() -> SettingsTree:
             #   True - расчет с учетом ТБ (клиент привязан к КМ в рамках ТБ)
             #   False - расчет без учета ТБ (клиент привязан к КМ глобально)
             "include_tb": False,  # True или False
+            # use_files_count: количество файлов для расчета (2 или 3)
+            #   2 - расчет по двум файлам (T-0 и T-1), требуется наличие current и previous
+            #   3 - расчет по трем файлам (T-0, T-1 и T-2), требуется наличие current, previous и previous2
+            "use_files_count": 2,  # 2 или 3
         },
         "percentile_calculation": {
             # Параметры расчета процентиля (кто кого обогнал)
@@ -3221,8 +3225,18 @@ def process_project(project_root: Path) -> None:
     previous_meta = file_index["previous"]
     previous2_meta = file_index.get("previous2")
     
-    # Проверяем, используется ли T-2 (если file_name не пустое)
-    use_t2 = previous2_meta is not None and previous2_meta.get("file_name", "").strip() != ""
+    # Получаем параметры основного расчета для определения количества файлов
+    main_calc_config = settings.get("main_calculation", {})
+    use_files_count = main_calc_config.get("use_files_count", 2)
+    
+    if use_files_count not in [2, 3]:
+        error_msg = f"Некорректное значение use_files_count: {use_files_count}. Допустимые значения: 2 или 3"
+        print(f"ОШИБКА: {error_msg}")
+        log_info(logger, error_msg)
+        return
+    
+    # Определяем необходимость использования T-2 на основе параметра
+    use_t2 = (use_files_count == 3)
 
     input_dir = project_root / "IN"
     output_dir = project_root / "OUT"
@@ -3268,12 +3282,28 @@ def process_project(project_root: Path) -> None:
         sheet_current = resolve_sheet_name(file_section, "current")
         sheet_previous = resolve_sheet_name(file_section, "previous")
 
-        if not current_file.exists() or not previous_file.exists():
-            log_info(
-                logger,
-                "Ожидаемые файлы отсутствуют в каталоге IN. "
-                "Положите исходные XLSX и повторите запуск."
+        # Проверяем наличие необходимых файлов в зависимости от use_files_count
+        missing_files = []
+        if not current_file.exists():
+            missing_files.append(f"T-0 (current): {current_meta['file_name']}")
+        if not previous_file.exists():
+            missing_files.append(f"T-1 (previous): {previous_meta['file_name']}")
+        
+        if use_files_count == 3:
+            if previous2_meta is None:
+                missing_files.append("T-2 (previous2): не указан в настройках")
+            else:
+                previous2_file = input_dir / previous2_meta["file_name"]
+                if not previous2_file.exists():
+                    missing_files.append(f"T-2 (previous2): {previous2_meta['file_name']}")
+        
+        if missing_files:
+            error_msg = (
+                f"Невозможно выполнить расчет: отсутствуют необходимые файлы для расчета по {use_files_count} файлам.\n"
+                f"Отсутствующие файлы:\n" + "\n".join(f"  - {f}" for f in missing_files)
             )
+            print(f"ОШИБКА: {error_msg}")
+            log_info(logger, error_msg)
             return
 
         # Инициализируем загрузчик данных
@@ -3293,27 +3323,22 @@ def process_project(project_root: Path) -> None:
             previous_drop_rules,
         )
         
-        # Загружаем T-2, если указан
+        # Загружаем T-2, если требуется
         previous2_df = None
         if use_t2:
             previous2_file = input_dir / previous2_meta["file_name"]
-            if previous2_file.exists():
-                previous2_columns = get_file_columns(file_section, "previous2", defaults)
-                previous2_filters = get_file_filters(file_section, "previous2", defaults)
-                previous2_drop_rules = build_drop_rules(previous2_filters.get("drop_rules", []))
-                previous2_df = data_loader.read_source_file(
-                    previous2_file,
-                    resolve_sheet_name(file_section, "previous2"),
-                    previous2_columns,
-                    previous2_drop_rules,
-                )
-                log_info(logger, f"Загружен файл T-2: {previous2_meta['file_name']}")
-            else:
-                log_info(logger, f"Файл T-2 не найден: {previous2_meta['file_name']}, используется логика с 2 файлами")
-                use_t2 = False
+            previous2_columns = get_file_columns(file_section, "previous2", defaults)
+            previous2_filters = get_file_filters(file_section, "previous2", defaults)
+            previous2_drop_rules = build_drop_rules(previous2_filters.get("drop_rules", []))
+            previous2_df = data_loader.read_source_file(
+                previous2_file,
+                resolve_sheet_name(file_section, "previous2"),
+                previous2_columns,
+                previous2_drop_rules,
+            )
+            log_info(logger, f"Загружен файл T-2: {previous2_meta['file_name']}")
 
-        # Получаем параметры основного расчета и процентиля
-        main_calc_config = settings.get("main_calculation", {})
+        # Получаем параметры основного расчета и процентиля (use_files_count уже получен выше)
         percentile_calc_config = settings.get("percentile_calculation", {})
         
         # Проверяем наличие необходимых блоков настроек
