@@ -48,7 +48,7 @@ def build_settings_tree() -> SettingsTree:
                 {
                     "key": "current",          # фиксированный ключ T-0; лучше не переименовывать.
                     "label": "T-0",            # подпись, которая пойдёт в логи.
-                    "file_name": "2025_M-10_DIF.xlsx",
+                    "file_name": "2025_M-10.xlsx",
                     "sheet": "Sheet1",
                     # Колонки для этого файла (если пустой массив [], используются из defaults.columns)
                     "columns": [
@@ -73,7 +73,7 @@ def build_settings_tree() -> SettingsTree:
                 {
                     "key": "previous",         # фиксированный ключ T-1.
                     "label": "T-1",
-                    "file_name": "2025_M-9_DIF.xlsx",
+                    "file_name": "2025_M-9.xlsx",
                     "sheet": "Sheet1",
                     # Колонки для этого файла (если пустой массив [], используются из defaults.columns)
                     "columns": [
@@ -98,7 +98,7 @@ def build_settings_tree() -> SettingsTree:
                 {
                     "key": "previous2",        # фиксированный ключ T-2.
                     "label": "T-2",
-                    "file_name": "2025_M-8_DIF.xlsx",  # Если пустое "", используется логика с 2 файлами
+                    "file_name": "2025_M-8.xlsx",  # Если пустое "", используется логика с 2 файлами
                     "sheet": "Sheet1",
                     # Колонки для этого файла (если пустой массив [], используются из defaults.columns)
                     "columns": [
@@ -123,7 +123,7 @@ def build_settings_tree() -> SettingsTree:
                 {
                     "key": "single",          # фиксированный ключ для одного файла (только для use_files_count="one")
                     "label": "Single",        # подпись, которая пойдёт в логи.
-                    "file_name": "2025_M-10_DIF.xlsx",  # Имя файла в каталоге IN (например, "2025_M-10_DIF.xlsx")
+                    "file_name": "2025_M-10.xlsx",  # Имя файла в каталоге IN (например, "2025_M-10.xlsx")
                     "sheet": "Sheet1",
                     # Колонки для этого файла (НЕ используются значения из defaults.columns, только свои)
                     # Для варианта 1 файл будет свой набор колонок, не связанный с default
@@ -159,9 +159,9 @@ def build_settings_tree() -> SettingsTree:
                 # Если пусто - берем из defaults
                 *[
                     {
-                        "key": f"2025_T-{i}",
-                        "label": f"2025_T-{i}",
-                        "file_name": "",  # Задается пользователем
+                        "key": f"2025_M-{i+1:02d}",
+                        "label": f"2025_M-{i+1:02d}",
+                        "file_name": f"2025_M-{i+1:02d}.xlsx",  # Имя файла в каталоге IN
                         "sheet": "Sheet1",
                         "columns": [],  # Если пустой массив [], используются из defaults.columns
                         "filters": {
@@ -172,9 +172,9 @@ def build_settings_tree() -> SettingsTree:
                 ],
                 *[
                     {
-                        "key": f"2024_T-{i}",
-                        "label": f"2024_T-{i}",
-                        "file_name": "",  # Задается пользователем
+                        "key": f"2024_M-{i+1:02d}",
+                        "label": f"2024_M-{i+1:02d}",
+                        "file_name": f"2024_M-{i+1:02d}.xlsx",  # Имя файла в каталоге IN
                         "sheet": "Sheet1",
                         "columns": [],  # Если пустой массив [], используются из defaults.columns
                         "filters": {
@@ -349,7 +349,7 @@ def build_settings_tree() -> SettingsTree:
             #   "two" - расчет по двум файлам (используются параметры из two_files)
             #   "three" - расчет по трем файлам (используются параметры из three_files)
             #   "new" - расчет по 24 файлам (12 для 2025 и 12 для 2024) - поиск новых клиентов
-            "use_files_count": "two",  # "one", "two", "three" или "new"
+            "use_files_count": "new",  # "one", "two", "three" или "new"
             
             # one_file: параметры для расчета по одному файлу (только для use_files_count="one")
             # Примечание: file_name, sheet, columns и filters находятся в files.items с key="single"
@@ -873,14 +873,26 @@ def build_manager_tb_mapping(
 ) -> pd.Series:
     """Строит словарь соответствия табельного номера менеджера и ТБ из исходных данных."""
     
-    # Объединяем оба датафрейма для получения всех соответствий
-    combined = pd.concat([
-        current_df[["manager_id", "tb"]].drop_duplicates(),
-        previous_df[["manager_id", "tb"]].drop_duplicates()
-    ]).drop_duplicates()
+    # Собираем данные из обоих датафреймов
+    dataframes_to_concat = []
     
-    # Если у одного менеджера несколько ТБ, берём первое (можно изменить логику на most_common)
-    mapping = combined.groupby("manager_id")["tb"].first()
+    # Добавляем данные из current_df, если он не пустой и содержит нужные колонки
+    if not current_df.empty and "manager_id" in current_df.columns and "tb" in current_df.columns:
+        dataframes_to_concat.append(current_df[["manager_id", "tb"]].drop_duplicates())
+    
+    # Добавляем данные из previous_df, если он не пустой и содержит нужные колонки
+    if not previous_df.empty and "manager_id" in previous_df.columns and "tb" in previous_df.columns:
+        dataframes_to_concat.append(previous_df[["manager_id", "tb"]].drop_duplicates())
+    
+    # Объединяем все датафреймы
+    if dataframes_to_concat:
+        combined = pd.concat(dataframes_to_concat, ignore_index=True).drop_duplicates()
+        # Если у одного менеджера несколько ТБ, берём первое (можно изменить логику на most_common)
+        mapping = combined.groupby("manager_id")["tb"].first()
+    else:
+        # Если нет данных, возвращаем пустой Series
+        mapping = pd.Series(dtype=object, name="tb")
+    
     return mapping
 
 
@@ -890,14 +902,26 @@ def build_manager_gosb_mapping(
 ) -> pd.Series:
     """Строит словарь соответствия табельного номера менеджера и ГОСБ из исходных данных."""
     
-    # Объединяем оба датафрейма для получения всех соответствий
-    combined = pd.concat([
-        current_df[["manager_id", "gosb"]].drop_duplicates(),
-        previous_df[["manager_id", "gosb"]].drop_duplicates()
-    ]).drop_duplicates()
+    # Собираем данные из обоих датафреймов
+    dataframes_to_concat = []
     
-    # Если у одного менеджера несколько ГОСБ, берём первое
-    mapping = combined.groupby("manager_id")["gosb"].first()
+    # Добавляем данные из current_df, если он не пустой и содержит нужные колонки
+    if not current_df.empty and "manager_id" in current_df.columns and "gosb" in current_df.columns:
+        dataframes_to_concat.append(current_df[["manager_id", "gosb"]].drop_duplicates())
+    
+    # Добавляем данные из previous_df, если он не пустой и содержит нужные колонки
+    if not previous_df.empty and "manager_id" in previous_df.columns and "gosb" in previous_df.columns:
+        dataframes_to_concat.append(previous_df[["manager_id", "gosb"]].drop_duplicates())
+    
+    # Объединяем все датафреймы
+    if dataframes_to_concat:
+        combined = pd.concat(dataframes_to_concat, ignore_index=True).drop_duplicates()
+        # Если у одного менеджера несколько ГОСБ, берём первое
+        mapping = combined.groupby("manager_id")["gosb"].first()
+    else:
+        # Если нет данных, возвращаем пустой Series
+        mapping = pd.Series(dtype=object, name="gosb")
+    
     return mapping
 
 
@@ -3384,18 +3408,6 @@ def calculate_new_clients(
     """
     log_info(logger, "Расчет новых клиентов: поиск ИНН с фактом в 2025, но без факта в 2024")
     
-    # Объединяем все файлы 2025 года
-    if files_2025:
-        df_2025_all = pd.concat(files_2025, ignore_index=True)
-    else:
-        df_2025_all = pd.DataFrame()
-    
-    # Объединяем все файлы 2024 года
-    if files_2024:
-        df_2024_all = pd.concat(files_2024, ignore_index=True)
-    else:
-        df_2024_all = pd.DataFrame()
-    
     # Определяем ключи для агрегации
     if key_mode == "client":
         if include_tb:
@@ -3405,6 +3417,37 @@ def calculate_new_clients(
     else:
         agg_keys = ["manager_id"]
     
+    # Для определения итогового ТН нужно объединить файлы в правильном порядке:
+    # сначала 2025 от декабря к январю (обратный порядок), потом 2024 от декабря к январю (обратный порядок)
+    # Это нужно для того, чтобы при использовании "last" в агрегации брался последний менеджер из этой последовательности
+    files_for_manager_selection = []
+    
+    # Добавляем файлы 2025 года в обратном порядке (от декабря к январю)
+    if files_2025:
+        files_for_manager_selection.extend(reversed(files_2025))
+    
+    # Добавляем файлы 2024 года в обратном порядке (от декабря к январю)
+    if files_2024:
+        files_for_manager_selection.extend(reversed(files_2024))
+    
+    # Объединяем все файлы для определения итогового ТН
+    if files_for_manager_selection:
+        df_all_for_manager = pd.concat(files_for_manager_selection, ignore_index=True)
+    else:
+        df_all_for_manager = pd.DataFrame()
+    
+    # Объединяем все файлы 2025 года (в обычном порядке для подсчета сумм)
+    if files_2025:
+        df_2025_all = pd.concat(files_2025, ignore_index=True)
+    else:
+        df_2025_all = pd.DataFrame()
+    
+    # Объединяем все файлы 2024 года (в обычном порядке для подсчета сумм)
+    if files_2024:
+        df_2024_all = pd.concat(files_2024, ignore_index=True)
+    else:
+        df_2024_all = pd.DataFrame()
+    
     # Агрегируем по ИНН (или ТН) для 2025 года
     if not df_2025_all.empty:
         # Считаем сумму факта для каждого ИНН
@@ -3412,13 +3455,46 @@ def calculate_new_clients(
             "fact_value_clean": "sum",
         }
         if key_mode == "client":
-            agg_dict["manager_id"] = "last"
+            # Для определения итогового ТН используем объединенный DataFrame всех файлов
+            # Выбираем ТН с максимальной суммой факта по каждому ИНН
+            if not df_all_for_manager.empty:
+                # Группируем по ИНН и ТН, суммируем факт
+                grouping_cols = agg_keys + ["manager_id", "manager_name"]
+                if include_tb and "tb" not in agg_keys:
+                    grouping_cols.append("tb")
+                
+                grouped = (
+                    df_all_for_manager[grouping_cols + ["fact_value_clean"]]
+                    .fillna({"fact_value_clean": 0.0})
+                    .groupby(grouping_cols, dropna=False, as_index=False)
+                    .sum(numeric_only=True)
+                )
+                
+                # Для каждого ИНН выбираем ТН с максимальной суммой факта
+                # Если суммы равны, idxmax вернет первый из равных
+                idx = grouped.groupby(agg_keys, dropna=False)["fact_value_clean"].idxmax()
+                manager_agg = grouped.loc[idx, grouping_cols].copy()
+                
+                # Убираем fact_value_clean из результата, оставляем только нужные колонки
+                result_cols = agg_keys + ["manager_id", "manager_name"]
+                if include_tb:
+                    if "tb" in manager_agg.columns:
+                        result_cols.append("tb")
+                manager_agg = manager_agg[result_cols].copy()
+            else:
+                manager_agg = pd.DataFrame(columns=agg_keys + ["manager_id", "manager_name"])
+                if include_tb:
+                    manager_agg["tb"] = []
+        else:
+            # Для key_mode == "manager" добавляем manager_name в агрегацию
             agg_dict["manager_name"] = "last"
-            if include_tb:
-                agg_dict["tb"] = "last"
         
         agg_2025 = df_2025_all.groupby(agg_keys, as_index=False).agg(agg_dict)
         agg_2025["Сумма_2025"] = agg_2025["fact_value_clean"]
+        
+        # Добавляем итоговый ТН для каждого ИНН (только для key_mode == "client")
+        if key_mode == "client" and not df_all_for_manager.empty:
+            agg_2025 = pd.merge(agg_2025, manager_agg, on=agg_keys, how="left")
         
         # Считаем количество месяцев с суммой > 0 для каждого ИНН
         # Для этого нужно посчитать по каждому файлу отдельно
@@ -3450,7 +3526,13 @@ def calculate_new_clients(
     # Агрегируем по ИНН (или ТН) для 2024 года
     if not df_2024_all.empty:
         # Считаем сумму факта для каждого ИНН
-        agg_2024 = df_2024_all.groupby(agg_keys, as_index=False).agg({"fact_value_clean": "sum"})
+        agg_dict_2024 = {
+            "fact_value_clean": "sum",
+        }
+        if key_mode == "manager":
+            # Для key_mode == "manager" добавляем manager_name в агрегацию
+            agg_dict_2024["manager_name"] = "last"
+        agg_2024 = df_2024_all.groupby(agg_keys, as_index=False).agg(agg_dict_2024)
         agg_2024["Сумма_2024"] = agg_2024["fact_value_clean"]
         
         # Считаем количество месяцев с суммой > 0 для каждого ИНН
@@ -3831,25 +3913,44 @@ def process_project(project_root: Path) -> None:
         return False
 
     try:
-        # Получаем колонки и фильтры для каждого файла
-        current_columns = get_file_columns(file_section, "current", defaults)
-        current_filters = get_file_filters(file_section, "current", defaults)
-        current_drop_rules = build_drop_rules(current_filters.get("drop_rules", []))
-        current_column_profiles = build_column_profiles(current_columns)
-        current_rename_map = current_column_profiles["rename_map"]
-        current_alias_to_source = current_column_profiles["alias_to_source"]
-        
-        previous_columns = get_file_columns(file_section, "previous", defaults)
-        previous_filters = get_file_filters(file_section, "previous", defaults)
-        previous_drop_rules = build_drop_rules(previous_filters.get("drop_rules", []))
-        previous_column_profiles = build_column_profiles(previous_columns)
-        previous_rename_map = previous_column_profiles["rename_map"]
-        previous_alias_to_source = previous_column_profiles["alias_to_source"]
-        
-        current_file = input_dir / current_meta["file_name"]
-        previous_file = input_dir / previous_meta["file_name"]
-        sheet_current = resolve_sheet_name(file_section, "current")
-        sheet_previous = resolve_sheet_name(file_section, "previous")
+        # Получаем колонки и фильтры для каждого файла (только для режимов "one", "two", "three")
+        if use_files_count != "new":
+            current_columns = get_file_columns(file_section, "current", defaults)
+            current_filters = get_file_filters(file_section, "current", defaults)
+            current_drop_rules = build_drop_rules(current_filters.get("drop_rules", []))
+            current_column_profiles = build_column_profiles(current_columns)
+            current_rename_map = current_column_profiles["rename_map"]
+            current_alias_to_source = current_column_profiles["alias_to_source"]
+            
+            previous_columns = get_file_columns(file_section, "previous", defaults)
+            previous_filters = get_file_filters(file_section, "previous", defaults)
+            previous_drop_rules = build_drop_rules(previous_filters.get("drop_rules", []))
+            previous_column_profiles = build_column_profiles(previous_columns)
+            previous_rename_map = previous_column_profiles["rename_map"]
+            previous_alias_to_source = previous_column_profiles["alias_to_source"]
+            
+            current_file = input_dir / current_meta["file_name"]
+            previous_file = input_dir / previous_meta["file_name"]
+            sheet_current = resolve_sheet_name(file_section, "current")
+            sheet_previous = resolve_sheet_name(file_section, "previous")
+        else:
+            # Для режима "new" эти переменные не используются
+            current_columns = []
+            current_filters = {}
+            current_drop_rules = []
+            current_column_profiles = {}
+            current_rename_map = {}
+            current_alias_to_source = {}
+            previous_columns = []
+            previous_filters = {}
+            previous_drop_rules = []
+            previous_column_profiles = {}
+            previous_rename_map = {}
+            previous_alias_to_source = {}
+            current_file = None
+            previous_file = None
+            sheet_current = None
+            sheet_previous = None
 
         # Проверяем наличие необходимых файлов в зависимости от use_files_count
         missing_files = []
@@ -3867,7 +3968,7 @@ def process_project(project_root: Path) -> None:
             single_file_path = input_dir / single_file_name
             if not single_file_path.exists():
                 missing_files.append(f"Один файл (single_file): {single_file_name}")
-        else:
+        elif use_files_count in ["two", "three"]:
             # Для двух и трех файлов проверяем current и previous
             if not current_file.exists():
                 missing_files.append(f"T-0 (current): {current_meta['file_name']}")
@@ -3881,6 +3982,7 @@ def process_project(project_root: Path) -> None:
                     previous2_file = input_dir / previous2_meta["file_name"]
                     if not previous2_file.exists():
                         missing_files.append(f"T-2 (previous2): {previous2_meta['file_name']}")
+        # Для режима "new" проверка файлов не выполняется здесь, файлы проверяются при загрузке
         
         if missing_files:
             error_msg = (
@@ -3972,9 +4074,10 @@ def process_project(project_root: Path) -> None:
             
             log_info(logger, f"Загрузка файлов для нового варианта расчета: key_mode={key_mode}, include_tb={include_tb}")
             
-            # Загружаем файлы 2025 года
+            # Загружаем файлы 2025 года (от января к декабрю: M-01, M-02, ..., M-12)
             for i in range(12):
-                file_key = f"2025_T-{i}"
+                month_num = i + 1
+                file_key = f"2025_M-{month_num:02d}"
                 try:
                     file_meta = get_file_meta(file_section, file_key)
                     file_name = file_meta.get("file_name", "").strip()
@@ -3993,17 +4096,18 @@ def process_project(project_root: Path) -> None:
                                 file_drop_rules,
                             )
                             files_2025.append(df)
-                            log_info(logger, f"Загружен файл 2025_T-{i}: {file_name}")
+                            log_info(logger, f"Загружен файл 2025_M-{month_num:02d}: {file_name}")
                         else:
-                            log_info(logger, f"Файл 2025_T-{i} не найден: {file_name}, пропускаем")
+                            log_info(logger, f"Файл 2025_M-{month_num:02d} не найден: {file_name}, пропускаем")
                     else:
-                        log_info(logger, f"Имя файла для 2025_T-{i} не указано, пропускаем")
+                        log_info(logger, f"Имя файла для 2025_M-{month_num:02d} не указано, пропускаем")
                 except KeyError:
-                    log_info(logger, f"Конфигурация для 2025_T-{i} не найдена, пропускаем")
+                    log_info(logger, f"Конфигурация для 2025_M-{month_num:02d} не найдена, пропускаем")
             
-            # Загружаем файлы 2024 года
+            # Загружаем файлы 2024 года (от января к декабрю: M-01, M-02, ..., M-12)
             for i in range(12):
-                file_key = f"2024_T-{i}"
+                month_num = i + 1
+                file_key = f"2024_M-{month_num:02d}"
                 try:
                     file_meta = get_file_meta(file_section, file_key)
                     file_name = file_meta.get("file_name", "").strip()
@@ -4022,13 +4126,13 @@ def process_project(project_root: Path) -> None:
                                 file_drop_rules,
                             )
                             files_2024.append(df)
-                            log_info(logger, f"Загружен файл 2024_T-{i}: {file_name}")
+                            log_info(logger, f"Загружен файл 2024_M-{month_num:02d}: {file_name}")
                         else:
-                            log_info(logger, f"Файл 2024_T-{i} не найден: {file_name}, пропускаем")
+                            log_info(logger, f"Файл 2024_M-{month_num:02d} не найден: {file_name}, пропускаем")
                     else:
-                        log_info(logger, f"Имя файла для 2024_T-{i} не указано, пропускаем")
+                        log_info(logger, f"Имя файла для 2024_M-{month_num:02d} не указано, пропускаем")
                 except KeyError:
-                    log_info(logger, f"Конфигурация для 2024_T-{i} не найдена, пропускаем")
+                    log_info(logger, f"Конфигурация для 2024_M-{month_num:02d} не найдена, пропускаем")
             
             log_info(logger, f"Загружено файлов 2025: {len(files_2025)}, файлов 2024: {len(files_2024)}")
             
@@ -4163,8 +4267,9 @@ def process_project(project_root: Path) -> None:
                 manager_tb_mapping = build_manager_tb_mapping(current_df, pd.DataFrame())
                 manager_gosb_mapping = build_manager_gosb_mapping(current_df, pd.DataFrame())
             else:
-                manager_tb_mapping = {}
-                manager_gosb_mapping = {}
+                # Если нет данных, возвращаем пустые Series
+                manager_tb_mapping = pd.Series(dtype=object, name="tb")
+                manager_gosb_mapping = pd.Series(dtype=object, name="gosb")
         else:
             manager_tb_mapping = build_manager_tb_mapping(current_df, previous_df)
             manager_gosb_mapping = build_manager_gosb_mapping(current_df, previous_df)
@@ -4298,9 +4403,11 @@ def process_project(project_root: Path) -> None:
                         )
                 
                 # Базовый SPOD датасет для CSV
+                # Для режима "new" используем value_column из основного расчета, иначе из конфигурации SPOD варианта
+                spod_value_column = value_column if use_files_count == "new" else spod_variant.get("value_column", "Прирост")
                 spod_dataset = build_spod_dataset(
                     source_table=source_table,
-                    value_column=spod_variant.get("value_column", "Прирост"),
+                    value_column=spod_value_column,
                     fact_value_filter=spod_variant.get("fact_value_filter", ">0"),
                     plan_value=spod_variant.get("plan_value", 0.0),
                     priority=spod_variant.get("priority", 1),
@@ -4314,13 +4421,13 @@ def process_project(project_root: Path) -> None:
                 )
                 
                 # Получаем отфильтрованную таблицу для добавления доп данных
-                mask = build_filter_mask(source_table[spod_variant.get("value_column", "Прирост")], 
+                mask = build_filter_mask(source_table[spod_value_column], 
                                         spod_variant.get("fact_value_filter", ">0"))
                 filtered_table = source_table[mask].copy()
                 
                 # Расширенный SPOD датасет для Excel (с дополнительными колонками)
                 # Используем percentile_value_column для колонки "Факт", если она определена
-                fact_column_for_excel = percentile_value_column if percentile_value_column is not None else spod_variant.get("value_column", "Прирост")
+                fact_column_for_excel = percentile_value_column if percentile_value_column is not None else spod_value_column
                 spod_dataset_excel = build_spod_dataset_for_excel(
                     source_table=source_table,
                     filtered_table=filtered_table,
